@@ -1,0 +1,205 @@
+.Modal {
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    right: 10%;
+    bottom: 10%;
+    border-radius: 10px;
+    opacity: 1;
+    transition: opacity 300ms ease-in-out;
+    background-color: #1E2329;
+    border: 1px solid #7CA97E;
+    overflow: hidden; /* Changed from overflow-y: scroll to hidden */
+    padding: 0;  /* Changed from 0.5rem to 0 */
+    box-shadow: 0 8px 8px rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .Overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    opacity: 0;
+    transition: opacity 300ms;
+    background-color: rgba(0, 0, 0, 0);
+  }
+
+  .Overlay.ReactModal__Overlay--after-open {
+    opacity: 1;
+  }
+
+  .Overlay.ReactModal__Overlay--before-close {
+    opacity: 0;
+  }
+
+.ToolInfo {
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+.ToolInfo h4 {
+    margin-bottom: -1.1rem;
+}
+
+.ToolContainer {
+    padding-left: 1rem;
+    padding-right: 1rem;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* Scrollbar styling */
+.ToolContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ToolContainer::-webkit-scrollbar-track {
+  background: #1E2329;
+}
+
+.ToolContainer::-webkit-scrollbar-thumb:hover {
+  background: #7CA97E;
+}
+
+.config-button-sticky {
+  position: absolute;
+  bottom: 25px;
+  right: 25px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #7CA97E;
+  color: #1E2329;
+  font-size: 28px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.2s ease;
+}
+
+.config-button-sticky:hover {
+  transform: scale(1.1);
+  background-color: #8FB996;
+}
+
+.modal-header {
+    position: sticky;
+    top: 0;
+    background-color: #2A2F35;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(124, 169, 126, 0.3);
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 2rem;
+    padding-right: 2rem;
+}
+
+.modal-header h1 {
+    color: #fff;
+    margin: 0;
+}
+
+.close-button {
+  background-color: rgba(42, 47, 53, 0.8);
+  color: #8FB996;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(124, 169, 126, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  padding: 0;
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background-color: rgba(58, 63, 69, 0.8);
+  transform: scale(1.05);
+  border-color: rgba(143, 185, 150, 0.5);
+}
+
+.button-container {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+    position: sticky;
+    bottom: 0;
+    background-color: #2A2F35;
+    border-top: 1px solid rgba(124, 169, 126, 0.3);
+}
+
+.ServerHeader {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s ease;
+  width: 100%;
+  text-align: left;
+  border: none;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background-color: #1E2329;
+  opacity: 1; 
+}
+
+.ServerHeader h2 {
+  margin-left: 0.5rem;
+}
+
+.ServerHeader:hover {
+  background-color: #363b42;
+  transform: none;
+}
+
+.ExpandToggle {
+  font-size: 1rem;
+  color: #7CA97E;
+  transition: transform 0.2s ease;
+}
+
+.ServerTools {
+  animation: slideDown 0.3s ease-out;
+  padding-left: 2rem;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ServerGroup {
+    margin-bottom: -1rem;
+    padding: 0.5rem;
+    background-color: #1E2329;
+    border-radius: 0.5rem;
+}
+
+.ServerName {
+    color: #7CA97E;
+    margin: 0;
+    padding-bottom: 0.5rem;
+    font-size: 1.3rem;
+}

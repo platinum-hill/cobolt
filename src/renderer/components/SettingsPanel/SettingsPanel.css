@@ -1,0 +1,653 @@
+.settings-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  background-color: #2A2F35;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  width: var(--settings-panel-width);
+  border-right: 1px solid rgba(124, 169, 126, 0.2);
+  display: flex;
+  flex-direction: column;
+  min-width: var(--settings-panel-width);
+  overflow-x: hidden;
+}
+
+.settings-panel.closed {
+  transform: translateX(-100%);
+}
+
+.settings-panel.open {
+  transform: translateX(0);
+}
+
+.toggle-button {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  background-color: rgba(42, 47, 53, 0.8);
+  color: #8FB996;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(124, 169, 126, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  z-index: 101;
+  padding: 0;
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.settings-panel.open .toggle-button {
+  left: calc(var(--settings-panel-width) - 40px);
+}
+
+.toggle-button:hover {
+  background-color: rgba(58, 63, 69, 0.8);
+  transform: scale(1.05);
+  border-color: rgba(143, 185, 150, 0.5);
+}
+
+/* Hamburger icon styles */
+.hamburger {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 18px;
+  height: 14px;
+}
+
+.hamburger span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background-color: #8FB996;
+  border-radius: 2px;
+  transition: all 0.25s ease;
+  transform-origin: center center;
+}
+
+/* Hamburger animation for open state */
+.settings-panel.open .toggle-button .hamburger span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.settings-panel.open .toggle-button .hamburger span:nth-child(2) {
+  opacity: 0;
+}
+
+.settings-panel.open .toggle-button .hamburger span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.panel-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid rgba(124, 169, 126, 0.15);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.panel-header h2 {
+  margin: 0;
+  padding-bottom: 0;
+  color: #8FB996;
+  font-size: 1.4rem;
+  font-weight: 500;
+}
+
+.close-panel-button {
+  background: transparent;
+  border: none;
+  color: #8FB996;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.close-panel-button:hover {
+  opacity: 1;
+}
+
+/* Improved New Chat Button */
+.new-chat-button {
+  margin: 16px 24px;
+  padding: 12px 18px;
+  background-color: rgba(124, 169, 126, 0.15);
+  color: #C5D8BC;
+  border: 1px solid rgba(143, 185, 150, 0.3);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.new-chat-button:hover {
+  background-color: rgba(124, 169, 126, 0.25);
+  border-color: rgba(143, 185, 150, 0.5);
+  transform: translateY(-1px);
+}
+
+.new-chat-button:active {
+  transform: translateY(0);
+}
+
+.new-chat-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button-text {
+  font-weight: 500;
+}
+
+.conversations-section {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px 24px;
+}
+
+.conversations-section h3 {
+  font-size: 1rem;
+  margin-bottom: 16px;
+  color: #8FB996;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+.conversations-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.conversation-placeholder {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  text-align: center;
+  padding: 16px 0;
+  color: #C5D8BC;
+}
+
+.conversations-list li {
+  margin-bottom: 8px;
+}
+
+.loading-indicator {
+  text-align: center;
+  color: #C5D8BC;
+  opacity: 0.7;
+  padding: 16px 0;
+  font-size: 0.9rem;
+}
+
+/* Chat list items */
+.conversation-item-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.conversation-item {
+  flex: 1;
+  text-align: left;
+  padding-right: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: 1px solid transparent;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  display: block;
+}
+
+.conversation-item:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+}
+
+.conversation-item.active {
+  background-color: rgba(124, 169, 126, 0.12);
+  border-color: rgba(143, 185, 150, 0.3);
+}
+
+.delete-chat-button {
+  background: none;
+  border: none;
+  color: #8FB996;
+  opacity: 0.5;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.delete-chat-button:hover {
+  opacity: 1;
+  background-color: rgba(229, 57, 53, 0.1);
+  color: #e53935;
+}
+
+.conversation-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.conversation-title {
+  color: #C5D8BC;
+  font-weight: 500;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conversation-preview {
+  color: #9DB5A7;
+  font-size: 0.85rem;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.settings-section {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(124, 169, 126, 0.15);
+}
+
+.settings-section h3 {
+  font-size: 1rem;
+  margin-bottom: 16px;
+  color: #8FB996;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+.settings-button {
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: transparent;
+  color: #C5D8BC;
+  border: 1px solid rgba(124, 169, 126, 0.15);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-shadow: none;
+  text-align: left;
+  opacity: 0.8;
+  gap: 12px;
+}
+
+.button-icon {
+  color: #8FB996;
+  margin-right: 12px;
+  font-size: 16px;
+}
+
+.settings-button:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+  border-color: rgba(143, 185, 150, 0.3);
+  opacity: 1;
+}
+
+.settings-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.about-section {
+  padding: 16px 24px;
+  opacity: 0.7;
+  font-size: 0.85rem;
+  color: #9DB5A7;
+}
+
+.about-section p {
+  margin: 4px 0;
+}
+
+/* Add space for the settings button in the main app container */
+.app-container {
+  padding-left: 80px;
+  transition: padding-left 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Adjust app container when panel is open */
+.app-container.panel-open {
+  padding-left: 280px;
+}
+
+.toggle-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+   background: transparent;
+  color: #C5D8BC;
+  border: 1px solid rgba(124, 169, 126, 0.15);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+/* Model Selection Section */
+.model-selection-section {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(124, 169, 126, 0.15);
+  border-bottom: 1px solid rgba(124, 169, 126, 0.15);
+}
+
+.model-selection-section h3 {
+  font-size: 1rem;
+  margin-bottom: 16px;
+  color: #8FB996;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  opacity: 0.9;
+}
+
+.model-dropdown-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.model-dropdown {
+  flex-grow: 1;
+  padding: 10px 14px;
+  background: transparent;
+  color: #C5D8BC;
+  border: 1px solid rgba(124, 169, 126, 0.15);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.toggle-setting:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+  border-color: rgba(143, 185, 150, 0.3);
+  opacity: 1;
+ }
+.model-dropdown:focus {
+  border-color: rgba(143, 185, 150, 0.3);
+  outline: none;
+  opacity: 1;
+}
+
+.model-dropdown:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+  border-color: rgba(143, 185, 150, 0.3);
+  opacity: 1;
+}
+
+.toggle-setting label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: rgba(124, 169, 126, 0.2);
+  color: #8FB996;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.memory-toggle.react-toggle {
+  margin-left: 10px;
+}
+
+.memory-toggle.react-toggle .react-toggle-track {
+  background-color: #2A2F35;
+  border: 1px solid rgba(124, 169, 126, 0.3);
+}
+
+.memory-toggle.react-toggle:hover:not(.react-toggle--disabled) .react-toggle-track {
+  background-color: #1E2329;
+}
+
+.memory-toggle.react-toggle--checked .react-toggle-track {
+  background-color: #7CA97E;
+}
+
+.memory-toggle.react-toggle--checked:hover:not(.react-toggle--disabled) .react-toggle-track {
+  background-color: #8FB996;
+}
+
+.memory-toggle.react-toggle .react-toggle-thumb {
+  border-color: #7CA97E;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+} 
+.model-dropdown:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.model-dropdown option {
+  background-color: #2A2F35;
+  color: #C5D8BC;
+}
+
+.refresh-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  color: #C5D8BC;
+  border: 1px solid rgba(124, 169, 126, 0.15);
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.refresh-button:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+  border-color: rgba(143, 185, 150, 0.3);
+  opacity: 1;
+}
+
+.refresh-button:active {
+  transform: scale(0.95);
+}
+
+.refresh-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.refresh-button[disabled] {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.current-model-info {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: #C5D8BC;
+  opacity: 0.7;
+}
+
+.current-model-info p {
+  margin: 4px 0;
+}
+
+.current-model-info strong {
+  color: #8FB996;
+  opacity: 0.9;
+}
+
+/* Add responsive adjustments */
+@media (max-width: 768px) {
+  .settings-panel {
+    width: var(--settings-panel-width-small);
+    min-width: var(--settings-panel-width-small);
+  }
+  
+  .settings-panel.open .toggle-button {
+    left: calc(var(--settings-panel-width-small) - 40px);
+  }
+}
+
+@media (max-width: 576px) {
+  .settings-panel {
+    width: var(--settings-panel-width-xsmall);
+    min-width: var(--settings-panel-width-xsmall);
+  }
+  
+  .settings-panel.open .toggle-button {
+    left: calc(var(--settings-panel-width-xsmall) - 40px);
+  }
+  
+  .panel-header, 
+  .conversations-section, 
+  .settings-section, 
+  .about-section {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Settings panel hovers on top of screen for small sizes */
+  .settings-panel {
+    width: 80%;
+    max-width: 350px;
+    min-width: 280px;
+    box-sizing: border-box;
+    z-index: 1000;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+  }
+  
+  .settings-panel.overlay-mode.open .toggle-button.close-button {
+    right: 10px;
+    left: auto;
+    top: 10px;
+    display: flex;
+  }
+  
+  .settings-panel.open .toggle-button {
+    right: 10px;
+    left: auto;
+    top: 10px;
+  }
+  
+  .toggle-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  
+  .panel-header, 
+  .conversations-section, 
+  .settings-section, 
+  .about-section {
+    padding-left: 12px;
+    padding-right: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .settings-button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 10px;
+  }
+}
+
+/* Overlay background for small screens */
+.settings-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 90;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Styles for overlay mode */
+.settings-panel.overlay-mode {
+  z-index: 1000;
+}
+
+.settings-panel.overlay-mode.open {
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(42, 47, 53, 0.9);
+}
