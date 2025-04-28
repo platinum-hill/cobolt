@@ -1,0 +1,21 @@
+{
+  "name": "cobolt",
+  "version": "0.0.1",
+  "description": "A foundation for scalable desktop apps",
+  "license": "MIT",
+  "author": {
+    "name": "Platinum Hill",
+    "email": "gauravagerwala@gmail.com",
+    "url": "https://github.com/platinum-hill"
+  },
+  "main": "./dist/main/main.js",
+  "scripts": {
+    "rebuild": "node -r ts-node/register ../../scripts/electron-rebuild.js",
+    "postinstall": "npm run rebuild && npm run link-modules",
+    "link-modules": "node -r ts-node/register ../../scripts/link-modules.ts"
+  },
+  "dependencies": {
+    "mem0ai": "^2.1.10",
+    "sqlite3": "^5.1.7"
+  }
+}
