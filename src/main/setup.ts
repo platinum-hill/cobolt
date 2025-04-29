@@ -9,7 +9,7 @@ function getPlatformInfo() {
   const isWindows = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
   const resourcesPath = app.isPackaged
-    ? process.resourcesPath
+    ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
 
   const scriptName = isWindows ? 'win_deps.bat' : 'mac_deps.sh';
@@ -104,10 +104,14 @@ async function checkAndRunFirstTimeSetup(
     log.error('Error during setup:', error);
     notifyRenderer(mainWindow, 'setup-complete', 'Setup failed');
 
-    dialog.showErrorBox(
-      'Setup Error',
-      'An error occurred during setup. Please check the logs for more details.',
-    );
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Setup Error',
+      message:
+        'An error occurred during setup. Please check the logs for more details.',
+      buttons: ['OK'],
+      defaultId: 0,
+    });
     return false;
   }
 }
