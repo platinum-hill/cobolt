@@ -20,6 +20,9 @@ const memoryConfig = {
       config: {
         collectionName: "memories",
         dimension: MODELS.TEXT_EMBEDDING_MODEL_DIMENSION,
+        // This key does not exist in the memory config interface, but is used by the vector store 
+        // constructor in Mem0. It is needed since Mem0 defaults to storing data in the current working directory.
+        dbPath: path.join(appDataPath, "memory.db"),
       },
     },
     llm: {
@@ -28,7 +31,7 @@ const memoryConfig = {
         model: MODELS.MEMORY_MODEL,
       },
     },
-    historyDbPath: path.join(appDataPath, "cobolt-memory.db")
+    historyDbPath: path.join(appDataPath, "memory-history.db")
 }
 
 // Initialize memory instance as undefined to allow for proper type checking
