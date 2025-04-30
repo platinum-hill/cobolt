@@ -223,7 +223,7 @@
       "category": "Development"
     },
     "directories": {
-      "app": "release/app",
+      "app": "dist",
       "buildResources": "assets",
       "output": "release/build"
     },
