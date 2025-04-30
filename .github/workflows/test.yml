@@ -38,7 +38,7 @@ jobs:
         run: |
           npm install
 
-      - name: npm test
+      - name: Run tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
