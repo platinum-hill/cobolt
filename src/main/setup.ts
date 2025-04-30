@@ -4,144 +4,115 @@ import { execFile } from 'child_process';
 import log from 'electron-log/main';
 import appMetadata from '../cobolt-backend/data_models/app_metadata';
 
-async function checkAndRunFirstTimeSetup(
-  mainWindow: BrowserWindow | null,
-): Promise<void> {
-  // Define paths
-  const isSetupComplete = appMetadata.getSetupComplete();
+// Get platform specific information required for initial setup
+function getPlatformInfo() {
+  const isWindows = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
   const resourcesPath = app.isPackaged
-    ? process.resourcesPath
+    ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
 
-  // Check if setup has already been completed
-  if (isSetupComplete) {
+  const scriptName = isWindows ? 'win_deps.bat' : 'mac_deps.sh';
+
+  return {
+    supported: isWindows || isMac,
+    name: isWindows ? 'Windows' : 'macOS',
+    scriptPath: path.join(resourcesPath, 'scripts', scriptName),
+  };
+}
+
+// UI updates
+function notifyRenderer(
+  mainWindow: BrowserWindow | null,
+  event: string,
+  message: string,
+) {
+  if (mainWindow) {
+    mainWindow.webContents.send(`${event}`, message);
+  }
+}
+
+function runSetupScript(
+  mainWindow: BrowserWindow | null,
+  platform: ReturnType<typeof getPlatformInfo>,
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(platform.scriptPath, [], { shell: true }, (error) => {
+      if (error) {
+        log.error(`Error running ${platform.name} setup script:`, error);
+        resolve(false);
+      } else {
+        log.info(`${platform.name} setup script completed successfully`);
+        appMetadata.setSetupComplete();
+        notifyRenderer(mainWindow, 'complete', 'Setup complete');
+
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Setup Complete',
+          message: 'Cobolt has been set up successfully!',
+          buttons: ['OK'],
+        });
+        resolve(true);
+      }
+    });
+  });
+}
+
+// TODO: Use electron renderer to show progrss updates during setup
+async function checkAndRunFirstTimeSetup(
+  mainWindow: BrowserWindow | null,
+): Promise<boolean> {
+  if (appMetadata.getSetupComplete()) {
     log.info('First-time setup already completed.');
-    return;
+    return true;
   }
 
-  // Show a dialog to inform user about dependency installation
-  const { response } = await dialog.showMessageBox({
+  const platform = getPlatformInfo();
+  if (!platform.supported) {
+    log.info('Skipping setup for unsupported platform');
+    appMetadata.setSetupComplete();
+    notifyRenderer(
+      mainWindow,
+      'complete',
+      'Setup skipped for unsupported platform',
+    );
+    return true;
+  }
+
+  await dialog.showMessageBox({
     type: 'info',
     title: 'Setting up Cobolt',
     message: 'Cobolt needs to install some dependencies for first-time setup.',
     detail:
       'This process may take a few minutes. You will be notified when it completes.',
-    buttons: ['Continue', 'Skip'],
+    buttons: ['Continue'],
     defaultId: 0,
   });
 
-  // If user chose to skip, just create the marker file and return
-  if (response === 1) {
-    log.info('Skipping setup...');
-    appMetadata.setSetupComplete();
-    return;
-  }
-
   try {
     log.info('Running first-time setup...');
+    notifyRenderer(mainWindow, 'setup-start', 'Starting setup...');
+    notifyRenderer(
+      mainWindow,
+      'setup-progress',
+      'installing required dependencies...',
+    );
+    log.info(`Running ${platform.name} setup script: ${platform.scriptPath}`);
 
-    // Notify renderer that setup is starting
-    if (mainWindow) {
-      mainWindow.webContents.send('setup-start');
-    }
-
-    // Run platform-specific setup script
-    if (process.platform === 'win32') {
-      const scriptPath = path.join(resourcesPath, 'scripts', 'win_deps.bat');
-      log.info(`Running Windows setup script: ${scriptPath}`);
-
-      // Send progress updates using a custom monitoring script
-      const sendProgressUpdate = (message: string) => {
-        if (mainWindow) {
-          mainWindow.webContents.send('setup-progress', message);
-        }
-      };
-
-      sendProgressUpdate('Installing Python and required dependencies...');
-
-      execFile(scriptPath, (error) => {
-        if (error) {
-          log.error('Error running Windows setup script:', error);
-          dialog.showErrorBox(
-            'Setup Failed',
-            'Failed to run dependency installation. Some features may not work correctly.',
-          );
-        } else {
-          log.info('Windows setup script completed successfully');
-          appMetadata.setSetupComplete();
-
-          // Notify renderer that setup is complete
-          if (mainWindow) {
-            mainWindow.webContents.send('setup-complete');
-          }
-
-          dialog.showMessageBox({
-            type: 'info',
-            title: 'Setup Complete',
-            message: 'Cobolt has been set up successfully!',
-            buttons: ['OK'],
-          });
-        }
-      });
-    } else if (process.platform === 'darwin') {
-      const scriptPath = path.join(resourcesPath, 'scripts', 'mac_deps.sh');
-      log.info(`Running macOS setup script: ${scriptPath}`);
-
-      // Send progress updates
-      const sendProgressUpdate = (message: string) => {
-        if (mainWindow) {
-          mainWindow.webContents.send('setup-progress', message);
-        }
-      };
-
-      sendProgressUpdate('Installing Homebrew and required dependencies...');
-
-      execFile(scriptPath, (error) => {
-        if (error) {
-          log.error('Error running macOS setup script:', error);
-          dialog.showErrorBox(
-            'Setup Failed',
-            'Failed to run dependency installation. Some features may not work correctly.',
-          );
-        } else {
-          log.info('macOS setup script completed successfully');
-          appMetadata.setSetupComplete();
-
-          // Notify renderer that setup is complete
-          if (mainWindow) {
-            mainWindow.webContents.send('setup-complete');
-          }
-
-          dialog.showMessageBox({
-            type: 'info',
-            title: 'Setup Complete',
-            message: 'Cobolt has been set up successfully!',
-            buttons: ['OK'],
-          });
-        }
-      });
-    } else {
-      // Linux or other platforms
-      log.info('Skipping setup for unsupported platform');
-      appMetadata.setSetupComplete();
-
-      // Notify renderer that setup is complete (skipped)
-      if (mainWindow) {
-        mainWindow.webContents.send('setup-complete');
-      }
-    }
+    return await runSetupScript(mainWindow, platform);
   } catch (error) {
     log.error('Error during setup:', error);
+    notifyRenderer(mainWindow, 'setup-complete', 'Setup failed');
 
-    // Notify renderer that setup is complete (failed)
-    if (mainWindow) {
-      mainWindow.webContents.send('setup-complete');
-    }
-
-    dialog.showErrorBox(
-      'Setup Error',
-      'An error occurred during setup. Some features may not work correctly.',
-    );
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Setup Error',
+      message:
+        'An error occurred during setup. Please check the logs for more details.',
+      buttons: ['OK'],
+      defaultId: 0,
+    });
+    return false;
   }
 }
 

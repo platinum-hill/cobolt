@@ -30,6 +30,7 @@ import {
 } from '../cobolt-backend/model_manager';
 import { McpClient } from '../cobolt-backend/connectors/mcp_client';
 import { updateMemoryEnabled } from '../cobolt-backend/memory';
+import checkAndRunFirstTimeSetup from './setup';
 
 let mainWindow: BrowserWindow | null = null;
 let persistentChatHistory: PersistentChatHistory;
@@ -385,6 +386,11 @@ app.on('window-all-closed', () => {
 app
   .whenReady()
   .then(async () => {
+    const setupSuccessful = await checkAndRunFirstTimeSetup(mainWindow);
+    if (!setupSuccessful) {
+      log.error('First-time setup failed. Exiting application.');
+      app.quit();
+    }
     createWindow();
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the

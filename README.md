@@ -33,7 +33,7 @@ node --version # check what version of node was installed
 
 Install development and runtime node dependencies:
 ```bash
-npm install
+npm install:all
 ```
 
 Start the debug application using:
