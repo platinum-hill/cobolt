@@ -17,7 +17,8 @@ module.exports = {
                 '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': '<rootDir>/tests/mocks/fileMock.js',
                 '\\.(css|less|sass|scss)$': 'identity-obj-proxy',
                 '^react-markdown$': '<rootDir>/tests/mocks/reactMarkdownMock.js',
-                '^remark-gfm$': '<rootDir>/tests/mocks/remarkGfmMock.js'
+                '^remark-gfm$': '<rootDir>/tests/mocks/remarkGfmMock.js',
+                '^sqlite3$': '<rootDir>/tests/mocks/sqlite3Mock.js'
             },
             setupFiles: [
                 './scripts/check-build-exists.ts'
@@ -46,7 +47,8 @@ module.exports = {
             moduleNameMapper: {
                 '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': '<rootDir>/tests/mocks/fileMock.js',
                 '\\.(css|less|sass|scss)$': 'identity-obj-proxy',
-                '^electron$': '<rootDir>/tests/mocks/electronMock.js'
+                '^electron$': '<rootDir>/tests/mocks/electronMock.js',
+                '^sqlite3$': '<rootDir>/tests/mocks/sqlite3Mock.js'
             },
             setupFiles: [
                 './scripts/check-build-exists.ts'

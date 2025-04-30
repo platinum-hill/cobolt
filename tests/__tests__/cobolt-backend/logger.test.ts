@@ -15,16 +15,6 @@ jest.mock('electron-log/main', () => ({
   },
 }));
 
-// Mock sqlite3 module
-jest.mock('sqlite3', () => ({
-  Database: jest.fn().mockImplementation(() => ({
-    run: jest.fn(),
-    get: jest.fn(),
-    all: jest.fn(),
-    close: jest.fn(),
-  })),
-}));
-
 // Mock electron app module
 jest.mock('electron', () => ({
   app: {
