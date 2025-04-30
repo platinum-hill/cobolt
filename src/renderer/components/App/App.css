@@ -44,10 +44,6 @@ button:hover {
   opacity: 1;
 }
 
-li {
-  list-style: none;
-}
-
 a {
   text-decoration: none;
   height: fit-content;
@@ -120,4 +116,4 @@ a:hover {
   .app-container.panel-open {
     padding-left: 0;
   }
-} 
+}
