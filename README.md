@@ -24,6 +24,9 @@ This is a cross-platform desktop application that allows you to chat with ollama
 
 **First time setup:** Install nvm and use that to install the latest stable LTS node version
 
+This project uses node-gyp which requires python and a C++ compiler. Please check the required depencies for your operating system on
+[node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#installation)
+
 On MacOS
 ```bash
 brew install nvm
