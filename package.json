@@ -164,7 +164,7 @@
       "package.json"
     ],
     "mac": {
-      "sign": "./scripts/notarize.js",
+      "sign": false,
       "notarize": false,
       "target": {
         "target": "default",
@@ -174,10 +174,11 @@
         ]
       },
       "type": "distribution",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "dmg": {
       "contents": [
@@ -223,7 +224,7 @@
       "category": "Development"
     },
     "directories": {
-      "app": "dist",
+      "app": "release/app",
       "buildResources": "assets",
       "output": "release/build"
     },
