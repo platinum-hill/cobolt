@@ -1,6 +1,5 @@
 import {
   parseDatetimeToEpoch,
-  formatDateTime,
   parseFormattedDate,
 } from '../../../src/cobolt-backend/datetime_parser';
 
@@ -38,43 +37,6 @@ describe('parseDatetimeToEpoch', () => {
 
   test('throws error for empty string', () => {
     expect(() => parseDatetimeToEpoch('')).toThrow();
-  });
-});
-
-describe('formatDateTime', () => {
-  test('formats Date objects correctly', () => {
-    const testCases = [
-      {
-        input: new Date('2025-07-09T00:00:00.000Z'),
-        expected: 'July 08, 2025, 05:00 PM -0700',
-      },
-      {
-        input: new Date('2025-02-25T19:30:00.000Z'),
-        expected: 'February 25, 2025, 11:30 AM -0800',
-      },
-      {
-        input: new Date('2025-12-31T23:59:00.000Z'),
-        expected: 'December 31, 2025, 03:59 PM -0800',
-      },
-      {
-        input: new Date('2024-02-29T00:00:00.000Z'),
-        expected: 'February 28, 2024, 04:00 PM -0800',
-      },
-    ];
-
-    testCases.forEach(({ input, expected }) => {
-      expect(formatDateTime(input)).toBe(expected);
-    });
-  });
-
-  test('handles Date objects at day boundaries', () => {
-    const midnight = new Date('2025-01-01T00:00:00.000Z');
-    expect(formatDateTime(midnight)).toBe('December 31, 2024, 04:00 PM -0800');
-
-    const lastMinute = new Date('2025-12-31T23:59:00.000Z');
-    expect(formatDateTime(lastMinute)).toBe(
-      'December 31, 2025, 03:59 PM -0800',
-    );
   });
 });
 

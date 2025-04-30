@@ -30,6 +30,7 @@ type ConfigSchema = {
 interface TypedStore<T extends Record<string, any>> extends Store<T> {
   get<K extends keyof T>(key: K): T[K];
   set<K extends keyof T>(key: K, value: T[K]): void;
+  clear(): void;
 }
 
 const store = new Store<ConfigSchema>({
