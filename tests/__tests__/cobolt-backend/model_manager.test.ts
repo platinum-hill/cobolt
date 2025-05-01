@@ -68,7 +68,7 @@ jest.mock('../../../src/cobolt-backend/model_manager', () => {
       try {
         const response = await mockList();
         return response.models;
-      } catch (error) {
+      } catch {
         return [];
       }
     },
@@ -88,7 +88,7 @@ jest.mock('../../../src/cobolt-backend/model_manager', () => {
         );
         await configStore.setMemoryModel(modelName);
         return true;
-      } catch (error) {
+      } catch {
         return false;
       }
     },
