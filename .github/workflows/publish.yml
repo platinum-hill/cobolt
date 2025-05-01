@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     branches:
-      - ga/fix-release 
+      - main
 
 jobs:
   publish:
