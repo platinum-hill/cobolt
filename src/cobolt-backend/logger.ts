@@ -58,7 +58,7 @@ class TraceLogger {
             parsedHeaders.forEach((header: string) => this.headers.add(header.trim()));
           }
         }
-      } catch (error) {
+      } catch {
         // If error reading file, we'll create a new one with default headers
         this.writeHeaders();
       }
@@ -118,8 +118,8 @@ class TraceLogger {
               existingData.shift();
             }
           }
-        } catch (error) {
-          // If error reading, we'll just write a new file
+        } catch {
+          // TODO: If error reading, we'll just write a new file
         }
 
         // Write new headers and existing data
@@ -158,7 +158,7 @@ class TraceLogger {
         if (csvContent.trim()) {
           rows = csvParse(csvContent, { columns: false });
         }
-      } catch (error) {
+      } catch {
         // If error reading, we'll just write a new file with this row
         rows = [Array.from(this.headers)];
       }
