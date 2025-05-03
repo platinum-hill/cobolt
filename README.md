@@ -32,11 +32,12 @@ On MacOS
 brew install nvm
 nvm install --lts
 node --version # check what version of node was installed
+brew install uv
 ```
 
 Install development and runtime node dependencies:
 ```bash
-npm install:all
+npm install
 ```
 
 Start the debug application using:
