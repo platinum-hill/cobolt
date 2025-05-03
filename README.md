@@ -24,32 +24,6 @@
 
 Cobolt is a powerful, cross-platform desktop application that revolutionizes your interaction with locally hosted AI models. Experience a seamless, intuitive interface while leveraging advanced features like persistent memory and extensible capabilities through the Model Context Protocol (MCP) framework.
 
-## ✨ Key Features
-
-- **🤖 Intelligent Model Selection**
-  - Seamlessly switch between any Ollama-supported model
-  - Quick model switching without restarting
-
-- **📚 Advanced Memory System**
-  - Persistent context retention across conversations
-  - Smart memory management
-  - Customizable memory settings
-
-- **🔄 Comprehensive History**
-  - Full conversation history tracking
-  - Easy navigation through past interactions
-  - Export and backup capabilities
-
-- **🔌 Extensible Architecture**
-  - Built-in Model Context Protocol (MCP) support
-  - Plugin system for custom extensions
-  - Developer-friendly API
-
-- **🌐 Cross-Platform Support**
-  - Native support for macOS and Windows
-  - Consistent experience across platforms
-  - Regular updates and improvements
-
 ## 🛠 Development
 
 ### Prerequisites
