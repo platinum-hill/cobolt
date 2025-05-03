@@ -51,7 +51,9 @@ const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 if (isDebug) {
-  require('electron-debug')();
+  import('electron-debug')
+    .then((electronDebug) => electronDebug.default())
+    .catch((error) => log.error('Failed to initialize electron-debug:', error));
 }
 
 async function processChunk(
