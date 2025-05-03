@@ -138,6 +138,9 @@ const createWindow = async () => {
 
   // Add new chat handler
   ipcMain.handle('create-new-chat', async () => {
+    // Clear the in-memory chat history to ensure no messages from previous chats are carried over
+    chatHistory.clear();
+
     const newChat = {
       id: uuidv4(),
       title: 'New Chat',
@@ -355,6 +358,34 @@ const createWindow = async () => {
       return { success: true };
     } catch (error) {
       log.error('Error deleting chat:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  });
+
+  // Add handler to clear and reload chat history when switching between chats
+  ipcMain.handle('load-chat', async (_, chatId: string) => {
+    try {
+      // Clear the in-memory chat history
+      chatHistory.clear();
+
+      // Load messages from the database for this chat
+      const messages = await persistentChatHistory.getMessagesForChat(chatId);
+
+      // Rebuild the in-memory chat history based on the loaded messages
+      messages.forEach((msg: any) => {
+        if (msg.role === 'user') {
+          chatHistory.addUserMessage(msg.content);
+        } else if (msg.role === 'assistant') {
+          chatHistory.addAssistantMessage(msg.content);
+        }
+      });
+
+      return { success: true };
+    } catch (error) {
+      log.error('Error loading chat history:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Unknown error',

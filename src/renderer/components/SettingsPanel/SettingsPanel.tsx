@@ -191,11 +191,18 @@ function SettingsPanel({
 
   const handleNewChat = async () => {
     try {
+      // Check if current chat has messages
+      if (currentChatId) {
+        const messages = await window.api.getMessagesForChat(currentChatId);
+        if (messages.length === 0) {
+          // If current chat has no messages, just select it instead of creating a new one
+          onSelectChat(currentChatId);
+          return;
+        }
+      }
+
       setIsLoading(true);
       await onNewChat();
-      // if (newChat.id) {
-      //   onSelectChat(newChat.id);
-      // }
       // Reload chats after creating a new one
       const chatsData = await window.api.getRecentChats();
       setChats(chatsData);

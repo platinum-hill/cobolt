@@ -87,6 +87,7 @@ const useMessages = (chatId: string) => {
   const loadChat = useCallback(async (newChatId: string) => {
     try {
       setIsLoading(true);
+      await window.api.loadChat(newChatId);
       const chatMessages = await window.api.getMessagesForChat(newChatId);
       setMessages(chatMessages);
       setInputMessage('');

@@ -26,6 +26,9 @@ declare global {
       >;
       updateChatTitle: (chatId: string, title: string) => Promise<void>;
       deleteChat: (chatId: string) => Promise<void>;
+      loadChat: (
+        chatId: string,
+      ) => Promise<{ success: boolean; message?: string }>;
 
       // Setup-related API methods
       onSetupStart: (callback: () => void) => void;

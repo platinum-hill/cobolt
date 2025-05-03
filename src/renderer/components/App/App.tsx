@@ -27,6 +27,7 @@ export default function App() {
 
   const handleNewChat = async () => {
     try {
+      // The backend will automatically clear the chat history
       const newChat = await window.api.createNewChat();
       setCurrentChatId(newChat.id);
       return newChat;
@@ -36,9 +37,16 @@ export default function App() {
     }
   };
 
-  const handleSelectChat = (chatId: string) => {
+  const handleSelectChat = async (chatId: string) => {
     if (!chatId) return;
-    setCurrentChatId(chatId);
+
+    try {
+      // Load the chat history in the backend
+      await window.api.loadChat(chatId);
+      setCurrentChatId(chatId);
+    } catch (error) {
+      log.error('Failed to load chat:', error);
+    }
   };
 
   return (
