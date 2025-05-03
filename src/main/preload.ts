@@ -32,6 +32,8 @@ const electronHandler = {
     ipcRenderer.invoke('update-chat-title', chatId, title),
   deleteChat: (chatId: string): Promise<void> =>
     ipcRenderer.invoke('delete-chat', chatId),
+  loadChat: (chatId: string): Promise<{ success: boolean; message?: string }> =>
+    ipcRenderer.invoke('load-chat', chatId),
 
   // Setup-related API methods
   onSetupStart: (callback: () => void) => {
