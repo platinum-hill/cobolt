@@ -32,7 +32,7 @@ On MacOS
 brew install nvm
 nvm install --lts
 node --version # check what version of node was installed
-brew install uv
+brew install uv && uv venv && source .venv/bin/activate
 ```
 
 Install development and runtime node dependencies:
