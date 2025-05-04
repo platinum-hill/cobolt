@@ -124,7 +124,7 @@
 
 /* Improved New Chat Button */
 .new-chat-button {
-  margin: 16px 24px;
+  margin: 16px 16px;
   padding: 12px 18px;
   background-color: rgba(124, 169, 126, 0.15);
   color: #C5D8BC;
@@ -138,6 +138,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
+  width: calc(100% - 32px);
 }
 
 .new-chat-button:hover {
@@ -164,6 +165,9 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px 24px;
+  width: 100%;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 
 .conversations-section h3 {
@@ -179,6 +183,7 @@
   list-style: none;
   padding: 0;
   margin: 0;
+  padding-left: 0;
 }
 
 .conversation-placeholder {
@@ -206,6 +211,8 @@
   display: flex;
   align-items: center;
   width: 100%;
+  padding-right: 0;
+  box-sizing: border-box;
 }
 
 .conversation-item {
@@ -223,6 +230,8 @@
   background: transparent;
   color: inherit;
   display: block;
+  margin-right: 8px;
+  width: calc(100% - 40px);
 }
 
 .conversation-item:hover {
@@ -246,6 +255,10 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
 }
 
 .delete-chat-button:hover {
