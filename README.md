@@ -26,44 +26,71 @@ Cobolt is a powerful, cross-platform desktop application that revolutionizes you
 
 ## 🛠 Development
 
-### Prerequisites
+### Dependencies
 
-- Node.js (LTS version)
+- Node.js (v22.14.0)
 - npm or yarn
-- Git
+- Python 3.x.x (For electron builder/ node-gyp)
+- Xcode Command Line Tools (For electron builder/ node-gyp) (MacOS)
+- Visual Studio (For electron builder/ node-gyp) (Windows)
 
 ### Setup
 
-1. **Install Node.js** using nvm:
+>[!Note]
+> Cobolt uses electron-builder to build native dependencies against the current electron version. This uses node-gyp under the hood which requires Python and platform specific C++ compiler
 
+1. **Install Python**
+
+    Download the platform specific python installer from [here](https://devguide.python.org/versions/)
+
+2. **Set up C++ build tools**
+    
+    **Windows**
+
+     Install Visual C++ Build Environment: For Visual Studio 2019 or later, use the `Desktop development with C++` workload from [Visual Studio Community](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community). From the workload, make sure to install a Windows 10 SDK
+
+    **MacOS**
+
+    Install the `Xcode Command Line Tools` standalone by running `xcode-select --install`. -- OR --
+    Alternatively, if you already have the [full Xcode installed](https://developer.apple.com/xcode/download/), you can install the Command Line Tools under the menu `Xcode -> Open Developer Tool -> More Developer Tools...`.
+
+
+
+3. **Install Node.js**:
+
+    **MacOs**
    ```bash
-   # macOS
    brew install nvm
-   nvm install --lts
+   nvm install 22.14.0
    node --version  # Verify installation
    ```
 
-This project uses node-gyp which requires python and a C++ compiler. Please check the required depencies for your operating system on
-[node-gyp docs](https://github.com/nodejs/node-gyp?tab=readme-ov-file#installation)
+   **Windows**
 
-On MacOS
-```bash
-brew install nvm
-nvm install --lts
-node --version # check what version of node was installed
-```
+    First, install [nvm for windows](https://github.com/coreybutler/nvm-windows)
+    ```bash
+    # in a powershell terminal
+    nvm install 22.14.0
+    node --version  # Verify installation
+    ```
 
-3. **Install dependencies**:
+4. **Clone the repository**:
    ```bash
-   npm install:all
+   git clone https://github.com/platinum-hill/cobolt.git
+   cd cobolt
    ```
 
-4. **Start development server**:
+5. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+6. **Start development server**:
    ```bash
    npm run start
    ```
 
-5. **Build for production**:
+7. **Build for production**:
    ```bash
    npm run package
    ```
