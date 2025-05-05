@@ -11,6 +11,7 @@
 import path from 'path';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import log from 'electron-log/main';
+import debug from 'electron-debug';
 import { v4 as uuidv4 } from 'uuid';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
@@ -51,7 +52,7 @@ const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 if (isDebug) {
-  require('electron-debug')();
+  debug();
 }
 
 async function processChunk(
