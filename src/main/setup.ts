@@ -16,7 +16,7 @@ function getPlatformInfo() {
   const scriptPath = path.join(resourcesPath, 'scripts', scriptName);
   let execCommand = '';
   if (isWindows) {
-    execCommand = `powershell.exe -File "${scriptPath}"`;
+    execCommand = `powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}"`;
   } else {
     execCommand = `"${scriptPath}"`;
   }

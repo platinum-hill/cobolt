@@ -8,7 +8,11 @@ function Loading() {
     <div className="loading-container">
       <div className="loading-spinner" />
       <h2>Setting up Cobolt</h2>
-      <p>Please wait while we complete the first-time setup...</p>
+      <p>
+        Please wait while we install required dependencies if needed (Ollama,
+        Python, etc.)
+      </p>
+      <p>This usually takes a few mins. We appreciate your patience.</p>
     </div>
   );
 }
