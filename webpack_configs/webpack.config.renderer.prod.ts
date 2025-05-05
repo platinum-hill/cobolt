@@ -25,12 +25,18 @@ const configuration: webpack.Configuration = {
 
   target: ['web', 'electron-renderer'],
 
-  entry: [path.join(webpackPaths.srcRendererPath, 'index.tsx')],
+  entry: {
+    main: path.join(webpackPaths.srcRendererPath, 'index.tsx'),
+    loading: path.join(
+      webpackPaths.srcRendererPath,
+      'components/Loading/loading.tsx',
+    ),
+  },
 
   output: {
     path: webpackPaths.distRendererPath,
     publicPath: './',
-    filename: 'renderer.js',
+    filename: '[name].js',
     library: {
       type: 'umd',
     },
@@ -123,6 +129,20 @@ const configuration: webpack.Configuration = {
     new HtmlWebpackPlugin({
       filename: 'index.html',
       template: path.join(webpackPaths.srcRendererPath, 'index.ejs'),
+      chunks: ['main'],
+      minify: {
+        collapseWhitespace: true,
+        removeAttributeQuotes: true,
+        removeComments: true,
+      },
+      isBrowser: false,
+      isDevelopment: false,
+    }),
+
+    new HtmlWebpackPlugin({
+      filename: 'loading.html',
+      template: path.join(webpackPaths.srcRendererPath, 'loading.ejs'),
+      chunks: ['loading'],
       minify: {
         collapseWhitespace: true,
         removeAttributeQuotes: true,

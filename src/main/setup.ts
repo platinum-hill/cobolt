@@ -44,22 +44,15 @@ function runSetupScript(
   mainWindow: BrowserWindow | null,
   platform: ReturnType<typeof getPlatformInfo>,
 ): Promise<boolean> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     execFile(platform.execCommand, [], { shell: true }, (error) => {
       if (error) {
         log.error(`Error running ${platform.name} setup script:`, error);
-        resolve(false);
+        reject(error);
       } else {
         log.info(`${platform.name} setup script completed successfully`);
         appMetadata.setSetupComplete();
         notifyRenderer(mainWindow, 'setup-complete', 'Setup complete');
-
-        dialog.showMessageBox({
-          type: 'info',
-          title: 'Setup Complete',
-          message: 'Cobolt has been set up successfully!',
-          buttons: ['OK'],
-        });
         resolve(true);
       }
     });
@@ -70,11 +63,6 @@ function runSetupScript(
 async function checkAndRunFirstTimeSetup(
   mainWindow: BrowserWindow | null,
 ): Promise<boolean> {
-  if (appMetadata.getSetupComplete()) {
-    log.info('First-time setup already completed.');
-    return true;
-  }
-
   const platform = getPlatformInfo();
   if (!platform.supported) {
     log.info('Skipping setup for unsupported platform');
@@ -86,16 +74,6 @@ async function checkAndRunFirstTimeSetup(
     );
     return true;
   }
-
-  await dialog.showMessageBox({
-    type: 'info',
-    title: 'Setting up Cobolt',
-    message: 'Cobolt needs to install some dependencies for first-time setup.',
-    detail:
-      'This process may take a few minutes. You will be notified when it completes.',
-    buttons: ['Continue'],
-    defaultId: 0,
-  });
 
   try {
     log.info('Running first-time setup...');

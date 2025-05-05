@@ -33,14 +33,9 @@ import { updateMemoryEnabled } from '../cobolt-backend/memory';
 import checkAndRunFirstTimeSetup from './setup';
 
 let mainWindow: BrowserWindow | null = null;
-let persistentChatHistory: PersistentChatHistory;
-log.initialize();
+let loadingWindow: BrowserWindow | null = null;
 
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  log.info(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
+log.initialize();
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -55,6 +50,115 @@ if (isDebug) {
     .then((electronDebug) => electronDebug.default())
     .catch(() => log.debug('error importing electron-debug'));
 }
+
+const RESOURCES_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, 'assets')
+  : path.join(__dirname, '../../assets');
+
+// Create a loading window to show during setup
+const createLoadingWindow = () => {
+  const getAssetPath = (...paths: string[]): string => {
+    return path.join(RESOURCES_PATH, ...paths);
+  };
+
+  loadingWindow = new BrowserWindow({
+    width: 400,
+    height: 300,
+    show: false,
+    frame: false,
+    resizable: false,
+    icon: getAssetPath('icon.png'),
+    webPreferences: {
+      preload: app.isPackaged
+        ? path.join(__dirname, 'preload.js')
+        : path.join(__dirname, '../dll/preload.js'),
+    },
+  });
+
+  loadingWindow.loadURL(resolveHtmlPath('loading.html'));
+  loadingWindow.once('ready-to-show', () => {
+    loadingWindow?.show();
+  });
+};
+
+// Close the loading window
+const closeLoadingWindow = () => {
+  if (loadingWindow) {
+    loadingWindow.close();
+    loadingWindow = null;
+  }
+};
+
+const runFirstTimeSetup = async () => {
+  if (!appMetadata.getSetupComplete()) {
+    createLoadingWindow();
+    const setupSuccessful = await checkAndRunFirstTimeSetup(loadingWindow);
+    if (!setupSuccessful) {
+      log.error('First-time setup failed. Exiting application.');
+      closeLoadingWindow();
+      app.quit();
+    }
+  } else {
+    log.info('First-time setup already completed.');
+  }
+};
+
+// Initialize main window
+const createWindow = async () => {
+  // Run first-time setup while loading window is shown
+  await runFirstTimeSetup();
+
+  await initDependencies();
+  await McpClient.connectToSevers();
+
+  const getAssetPath = (...paths: string[]): string => {
+    return path.join(RESOURCES_PATH, ...paths);
+  };
+
+  mainWindow = new BrowserWindow({
+    show: false,
+    width: 1024,
+    height: 728,
+    minWidth: 500,
+    minHeight: 500,
+    icon: getAssetPath('icon.png'),
+    webPreferences: {
+      preload: app.isPackaged
+        ? path.join(__dirname, 'preload.js')
+        : path.join(__dirname, '../dll/preload.js'),
+    },
+  });
+  mainWindow.loadURL(resolveHtmlPath('index.html'));
+  mainWindow.on('ready-to-show', () => {
+    if (!mainWindow) {
+      throw new Error('"mainWindow" is not defined');
+    }
+    // Close loading window once main window is ready
+    closeLoadingWindow();
+
+    if (process.env.START_MINIMIZED) {
+      mainWindow.minimize();
+    } else {
+      mainWindow.show();
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  const menuBuilder = new MenuBuilder(mainWindow);
+  menuBuilder.buildMenu();
+
+  // Open urls in the user's browser
+  mainWindow.webContents.setWindowOpenHandler((edata) => {
+    shell.openExternal(edata.url);
+    return { action: 'deny' };
+  });
+};
+
+const chatHistory = new ChatHistory();
+const persistentChatHistory = new PersistentChatHistory();
 
 async function processChunk(
   stream: AsyncGenerator<string>,
@@ -83,67 +187,6 @@ async function processChunk(
     return fullResponse;
   }
 }
-
-const createWindow = async () => {
-  const setupSuccessful = await checkAndRunFirstTimeSetup(mainWindow);
-  if (!setupSuccessful) {
-    log.error('First-time setup failed. Exiting application.');
-    app.quit();
-  }
-  await initDependencies();
-  await McpClient.connectToSevers();
-
-  const RESOURCES_PATH = app.isPackaged
-    ? path.join(process.resourcesPath, 'assets')
-    : path.join(__dirname, '../../assets');
-
-  const getAssetPath = (...paths: string[]): string => {
-    return path.join(RESOURCES_PATH, ...paths);
-  };
-
-  mainWindow = new BrowserWindow({
-    show: false,
-    width: 1024,
-    height: 728,
-    minWidth: 500,
-    minHeight: 500,
-    icon: getAssetPath('icon.png'),
-    webPreferences: {
-      preload: app.isPackaged
-        ? path.join(__dirname, 'preload.js')
-        : path.join(__dirname, '../dll/preload.js'),
-    },
-  });
-
-  mainWindow.loadURL(resolveHtmlPath('index.html'));
-
-  mainWindow.on('ready-to-show', () => {
-    if (!mainWindow) {
-      throw new Error('"mainWindow" is not defined');
-    }
-    if (process.env.START_MINIMIZED) {
-      mainWindow.minimize();
-    } else {
-      mainWindow.show();
-    }
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-
-  const menuBuilder = new MenuBuilder(mainWindow);
-  menuBuilder.buildMenu();
-
-  // Open urls in the user's browser
-  mainWindow.webContents.setWindowOpenHandler((edata) => {
-    shell.openExternal(edata.url);
-    return { action: 'deny' };
-  });
-};
-
-const chatHistory = new ChatHistory();
-persistentChatHistory = new PersistentChatHistory();
 
 // Add new chat handler
 ipcMain.handle('create-new-chat', async () => {
