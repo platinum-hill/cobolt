@@ -5,7 +5,7 @@ import fs from 'fs';
 import webpackPaths from '../webpack_configs/webpack.paths';
 
 const mainPath = path.join(webpackPaths.distMainPath, 'main.js');
-const rendererPath = path.join(webpackPaths.distRendererPath, 'renderer.js');
+const rendererPath = path.join(webpackPaths.distRendererPath, 'main.js');
 
 if (!fs.existsSync(mainPath)) {
   throw new Error(
