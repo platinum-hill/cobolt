@@ -51,7 +51,9 @@ const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 if (isDebug) {
-  require('electron-debug')();
+  import('electron-debug')
+    .then((electronDebug) => electronDebug.default())
+    .catch(() => log.debug('error importing electron-debug'));
 }
 
 async function processChunk(
@@ -83,10 +85,13 @@ async function processChunk(
 }
 
 const createWindow = async () => {
+  const setupSuccessful = await checkAndRunFirstTimeSetup(mainWindow);
+  if (!setupSuccessful) {
+    log.error('First-time setup failed. Exiting application.');
+    app.quit();
+  }
   await initDependencies();
   await McpClient.connectToSevers();
-  const chatHistory = new ChatHistory();
-  persistentChatHistory = new PersistentChatHistory();
 
   const RESOURCES_PATH = app.isPackaged
     ? path.join(process.resourcesPath, 'assets')
@@ -135,264 +140,267 @@ const createWindow = async () => {
     shell.openExternal(edata.url);
     return { action: 'deny' };
   });
-
-  // Add new chat handler
-  ipcMain.handle('create-new-chat', async () => {
-    // Clear the in-memory chat history to ensure no messages from previous chats are carried over
-    chatHistory.clear();
-
-    const newChat = {
-      id: uuidv4(),
-      title: 'New Chat',
-      created_at: new Date(),
-    };
-    await persistentChatHistory.addChat(newChat);
-    return newChat;
-  });
-
-  // Get recent chats handler
-  ipcMain.handle('get-recent-chats', async () => {
-    try {
-      const chats = await persistentChatHistory.getRecentChats();
-
-      // For each chat, get the last message
-      const enhancedChats = await Promise.all(
-        chats.map(async (chat: any) => {
-          try {
-            const messages = await persistentChatHistory.getMessagesForChat(
-              chat.id,
-            );
-            const lastMessage =
-              messages.length > 0 ? messages[messages.length - 1].content : '';
-
-            // Format the timestamp if it exists
-            const timestamp = chat.created_at ? chat.created_at : new Date();
-
-            return {
-              ...chat,
-              lastMessage,
-              timestamp,
-            };
-          } catch (error) {
-            log.error(`Error getting messages for chat ${chat.id}:`, error);
-            return {
-              ...chat,
-              lastMessage: '',
-              timestamp: new Date(),
-            };
-          }
-        }),
-      );
-
-      return enhancedChats;
-    } catch (error) {
-      log.error('Error getting recent chats:', error);
-      return [];
-    }
-  });
-
-  // Get messages for a specific chat
-  ipcMain.handle('get-messages', async (_, chatId) => {
-    try {
-      return await persistentChatHistory.getMessagesForChat(chatId);
-    } catch (error) {
-      log.error('Error fetching messages:', error);
-      return [];
-    }
-  });
-
-  // Update chat title
-  ipcMain.handle('update-chat-title', async (_, chatId, title) => {
-    try {
-      await persistentChatHistory.updateChatTitle(chatId, title);
-    } catch (error) {
-      log.error('Error updating chat title:', error);
-    }
-  });
-
-  // Set up IPC handlers
-  ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
-    try {
-      globalCancellationToken.reset();
-
-      // Add the user message to chat history
-      chatHistory.addUserMessage(message);
-
-      // Store message in the database linked to specific chat
-      await persistentChatHistory.addMessageToChat(chatId, 'user', message);
-
-      // Update chat title if this is the first message and title is still the default
-      const chat = await persistentChatHistory.getChat(chatId);
-      if (chat && chat.title === 'New Chat') {
-        // Use the first ~30 chars of the message as the title
-        const newTitle =
-          message.length > 30 ? `${message.substring(0, 30)}...` : message;
-        await persistentChatHistory.updateChatTitle(chatId, newTitle);
-      }
-
-      const requestContext: RequestContext = {
-        currentDatetime: new Date(),
-        chatHistory,
-        question: message,
-        requestId: uuidv4(),
-      };
-
-      const stream = await queryEngineInstance.query(
-        requestContext,
-        'CONTEXT_AWARE',
-        globalCancellationToken,
-      );
-
-      // Process response and save it to the database
-      await processChunk(stream, chatId);
-
-      // Trigger event to update the chat list with new message
-      mainWindow?.webContents.send('chat-updated');
-
-      return true;
-    } catch (error) {
-      log.error('Error processing message:', error);
-      mainWindow?.webContents.send(
-        'message-response',
-        'Sorry, I encountered an error processing your message.',
-      );
-      return false;
-    }
-  });
-
-  ipcMain.handle('cancel-message', () => {
-    globalCancellationToken.cancel();
-    return { success: true };
-  });
-
-  ipcMain.handle('clear-chat', () => {
-    chatHistory.clear();
-  });
-
-  // Memory settings IPC handlers
-  ipcMain.handle('get-memory-enabled', () => {
-    return appMetadata.getMemoryEnabled();
-  });
-
-  ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
-    updateMemoryEnabled(enabled);
-    return true;
-  });
-
-  ipcMain.handle('get-available-models', async () => {
-    try {
-      const models = await getAvailableModels();
-      return {
-        success: true,
-        models,
-      };
-    } catch (error) {
-      log.error('Error getting available models:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
-
-  ipcMain.handle('get-config', () => {
-    try {
-      const models = getCurrentModels();
-      return {
-        success: true,
-        data: { models },
-      };
-    } catch (error) {
-      log.error('Error getting config:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
-
-  // Handler to open MCP servers configuration file
-  ipcMain.handle('open-mcp-servers-file', () => {
-    try {
-      const appDataPath = app.getPath('userData');
-      const configPath = path.join(appDataPath, 'mcp-servers.json');
-
-      // Open file with system default app
-      shell.openPath(configPath);
-
-      return {
-        success: true,
-        message: 'File opened successfully',
-      };
-    } catch (error) {
-      log.error('Error opening MCP servers file:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
-
-  ipcMain.handle('update-core-models', async (_event, newModelName) => {
-    try {
-      const success = await updateCoreModels(newModelName);
-      return {
-        success,
-        message: success
-          ? 'Models updated successfully'
-          : 'Failed to update models',
-      };
-    } catch (error) {
-      log.error('Error updating core models:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
-
-  // Add this with your other IPC handlers
-  ipcMain.handle('delete-chat', async (_, chatId: string) => {
-    try {
-      await persistentChatHistory.deleteChat(chatId);
-      return { success: true };
-    } catch (error) {
-      log.error('Error deleting chat:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
-
-  // Add handler to clear and reload chat history when switching between chats
-  ipcMain.handle('load-chat', async (_, chatId: string) => {
-    try {
-      // Clear the in-memory chat history
-      chatHistory.clear();
-
-      // Load messages from the database for this chat
-      const messages = await persistentChatHistory.getMessagesForChat(chatId);
-
-      // Rebuild the in-memory chat history based on the loaded messages
-      messages.forEach((msg: any) => {
-        if (msg.role === 'user') {
-          chatHistory.addUserMessage(msg.content);
-        } else if (msg.role === 'assistant') {
-          chatHistory.addAssistantMessage(msg.content);
-        }
-      });
-
-      return { success: true };
-    } catch (error) {
-      log.error('Error loading chat history:', error);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
-      };
-    }
-  });
 };
+
+const chatHistory = new ChatHistory();
+persistentChatHistory = new PersistentChatHistory();
+
+// Add new chat handler
+ipcMain.handle('create-new-chat', async () => {
+  // Clear the in-memory chat history to ensure no messages from previous chats are carried over
+  chatHistory.clear();
+
+  const newChat = {
+    id: uuidv4(),
+    title: 'New Chat',
+    created_at: new Date(),
+  };
+  await persistentChatHistory.addChat(newChat);
+  return newChat;
+});
+
+// Get recent chats handler
+ipcMain.handle('get-recent-chats', async () => {
+  try {
+    const chats = await persistentChatHistory.getRecentChats();
+
+    // For each chat, get the last message
+    const enhancedChats = await Promise.all(
+      chats.map(async (chat: any) => {
+        try {
+          const messages = await persistentChatHistory.getMessagesForChat(
+            chat.id,
+          );
+          const lastMessage =
+            messages.length > 0 ? messages[messages.length - 1].content : '';
+
+          // Format the timestamp if it exists
+          const timestamp = chat.created_at ? chat.created_at : new Date();
+
+          return {
+            ...chat,
+            lastMessage,
+            timestamp,
+          };
+        } catch (error) {
+          log.error(`Error getting messages for chat ${chat.id}:`, error);
+          return {
+            ...chat,
+            lastMessage: '',
+            timestamp: new Date(),
+          };
+        }
+      }),
+    );
+
+    return enhancedChats;
+  } catch (error) {
+    log.error('Error getting recent chats:', error);
+    return [];
+  }
+});
+
+// Get messages for a specific chat
+ipcMain.handle('get-messages', async (_, chatId) => {
+  try {
+    return await persistentChatHistory.getMessagesForChat(chatId);
+  } catch (error) {
+    log.error('Error fetching messages:', error);
+    return [];
+  }
+});
+
+// Update chat title
+ipcMain.handle('update-chat-title', async (_, chatId, title) => {
+  try {
+    await persistentChatHistory.updateChatTitle(chatId, title);
+  } catch (error) {
+    log.error('Error updating chat title:', error);
+  }
+});
+
+// Set up IPC handlers
+ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
+  try {
+    globalCancellationToken.reset();
+
+    // Add the user message to chat history
+    chatHistory.addUserMessage(message);
+
+    // Store message in the database linked to specific chat
+    await persistentChatHistory.addMessageToChat(chatId, 'user', message);
+
+    // Update chat title if this is the first message and title is still the default
+    const chat = await persistentChatHistory.getChat(chatId);
+    if (chat && chat.title === 'New Chat') {
+      // Use the first ~30 chars of the message as the title
+      const newTitle =
+        message.length > 30 ? `${message.substring(0, 30)}...` : message;
+      await persistentChatHistory.updateChatTitle(chatId, newTitle);
+    }
+
+    const requestContext: RequestContext = {
+      currentDatetime: new Date(),
+      chatHistory,
+      question: message,
+      requestId: uuidv4(),
+    };
+
+    const stream = await queryEngineInstance.query(
+      requestContext,
+      'CONTEXT_AWARE',
+      globalCancellationToken,
+    );
+
+    // Process response and save it to the database
+    await processChunk(stream, chatId);
+
+    // Trigger event to update the chat list with new message
+    mainWindow?.webContents.send('chat-updated');
+
+    return true;
+  } catch (error) {
+    log.error('Error processing message:', error);
+    mainWindow?.webContents.send(
+      'message-response',
+      'Sorry, I encountered an error processing your message.',
+    );
+    return false;
+  }
+});
+
+ipcMain.handle('cancel-message', () => {
+  globalCancellationToken.cancel();
+  return { success: true };
+});
+
+ipcMain.handle('clear-chat', () => {
+  chatHistory.clear();
+});
+
+// Memory settings IPC handlers
+ipcMain.handle('get-memory-enabled', () => {
+  return appMetadata.getMemoryEnabled();
+});
+
+ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
+  updateMemoryEnabled(enabled);
+  return true;
+});
+
+ipcMain.handle('get-available-models', async () => {
+  try {
+    const models = await getAvailableModels();
+    return {
+      success: true,
+      models,
+    };
+  } catch (error) {
+    log.error('Error getting available models:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
+
+ipcMain.handle('get-config', () => {
+  try {
+    const models = getCurrentModels();
+    return {
+      success: true,
+      data: { models },
+    };
+  } catch (error) {
+    log.error('Error getting config:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
+
+// Handler to open MCP servers configuration file
+ipcMain.handle('open-mcp-servers-file', () => {
+  try {
+    const appDataPath = app.getPath('userData');
+    const configPath = path.join(appDataPath, 'mcp-servers.json');
+
+    // Open file with system default app
+    shell.openPath(configPath);
+
+    return {
+      success: true,
+      message: 'File opened successfully',
+    };
+  } catch (error) {
+    log.error('Error opening MCP servers file:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
+
+ipcMain.handle('update-core-models', async (_event, newModelName) => {
+  try {
+    const success = await updateCoreModels(newModelName);
+    return {
+      success,
+      message: success
+        ? 'Models updated successfully'
+        : 'Failed to update models',
+    };
+  } catch (error) {
+    log.error('Error updating core models:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
+
+// Add this with your other IPC handlers
+ipcMain.handle('delete-chat', async (_, chatId: string) => {
+  try {
+    await persistentChatHistory.deleteChat(chatId);
+    return { success: true };
+  } catch (error) {
+    log.error('Error deleting chat:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
+
+// Add handler to clear and reload chat history when switching between chats
+ipcMain.handle('load-chat', async (_, chatId: string) => {
+  try {
+    // Clear the in-memory chat history
+    chatHistory.clear();
+
+    // Load messages from the database for this chat
+    const messages = await persistentChatHistory.getMessagesForChat(chatId);
+
+    // Rebuild the in-memory chat history based on the loaded messages
+    messages.forEach((msg: any) => {
+      if (msg.role === 'user') {
+        chatHistory.addUserMessage(msg.content);
+      } else if (msg.role === 'assistant') {
+        chatHistory.addAssistantMessage(msg.content);
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    log.error('Error loading chat history:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+});
 
 ipcMain.handle('list-tools', () => {
   return McpClient.toolCache.map((tool) => ({
@@ -417,11 +425,6 @@ app.on('window-all-closed', () => {
 app
   .whenReady()
   .then(async () => {
-    const setupSuccessful = await checkAndRunFirstTimeSetup(mainWindow);
-    if (!setupSuccessful) {
-      log.error('First-time setup failed. Exiting application.');
-      app.quit();
-    }
     createWindow();
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the

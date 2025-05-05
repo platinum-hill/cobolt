@@ -59,39 +59,35 @@ class MCPClient {
     }
 
     private async connectToMcpServer(server: MCPServer) {
-        try {
-            const client = new Client({ name: server.name, version: "0.0.1" });
+        const client = new Client({ name: server.name, version: "0.0.1" });
 
-            const args = server.args ? [...server.args] : [];
+        const args = [...server.args]
 
-            // Create a custom environment with the current process env plus our custom vars
-            // Cast to Record<string, string> to ensure all values are strings
-            const customEnv: Record<string, string> = Object.entries(process.env).reduce((acc, [key, value]) => {
-                if (value !== undefined) {
-                    acc[key] = value;
-                }
-                return acc;
-            }, {} as Record<string, string>);
-
-            if (server.env) {
-                // Add server-specific environment variables, overriding any existing ones
-                Object.entries(server.env).forEach(([key, value]) => {
-                    customEnv[key] = value;
-                });
+        // Create a custom environment with the current process env plus our custom vars
+        // Cast to Record<string, string> to ensure all values are strings
+        const customEnv: Record<string, string> = Object.entries(process.env).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = value;
             }
+            return acc;
+        }, {} as Record<string, string>);
 
-            const transport = new StdioClientTransport({
-                command: server.command,
-                args,
-                env: customEnv // Pass the environment variables to the child process
+        if (server.env) {
+            // Add server-specific environment variables, overriding any existing ones
+            Object.entries(server.env).forEach(([key, value]) => {
+                customEnv[key] = value;
             });
-
-            await client.connect(transport);
-            this.clients.push(client);
-            log.info(`Connected to MCP server ${server.name}`);
-        } catch (error) {
-            log.error("Failed to connect to MCP server:", error);
         }
+
+        const transport = new StdioClientTransport({
+            command: server.command,
+            args,
+            env: customEnv // Pass the environment variables to the child process
+        });
+
+        await client.connect(transport);
+        this.clients.push(client);
+        log.info(`Connected to MCP server ${server.name}`);
     }
 
     private async listAllConnectedTools(): Promise<McpTool[]> {
@@ -106,7 +102,6 @@ class MCPClient {
     private async listTools(client: Client): Promise<McpTool[]> {
         try {
             const toolsResult = await client.listTools();
-            log.info("Available tools:", toolsResult);
 
             const functionTools = toolsResult.tools.map((tool) => {
                 const ollamaInputSchema = tool.inputSchema || {};
@@ -191,13 +186,5 @@ class MCPClient {
 }
 
 const McpClient = new MCPClient();
-
-if (require.main === module) {
-    (async () => {
-        await McpClient.connectToSevers();
-        const tools = await McpClient.toolCache;
-        log.info(JSON.stringify(tools, null, 3));
-    })();
-}
 
 export { McpClient };

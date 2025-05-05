@@ -12,12 +12,20 @@ function getPlatformInfo() {
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
 
-  const scriptName = isWindows ? 'win_deps.bat' : 'mac_deps.sh';
+  const scriptName = isWindows ? 'win_deps.ps1' : 'mac_deps.sh';
+  const scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+  let execCommand = '';
+  if (isWindows) {
+    execCommand = `powershell.exe -File "${scriptPath}"`;
+  } else {
+    execCommand = `"${scriptPath}"`;
+  }
 
   return {
     supported: isWindows || isMac,
     name: isWindows ? 'Windows' : 'macOS',
-    scriptPath: path.join(resourcesPath, 'scripts', scriptName),
+    scriptPath,
+    execCommand,
   };
 }
 
@@ -37,14 +45,14 @@ function runSetupScript(
   platform: ReturnType<typeof getPlatformInfo>,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    execFile(platform.scriptPath, [], { shell: true }, (error) => {
+    execFile(platform.execCommand, [], { shell: true }, (error) => {
       if (error) {
         log.error(`Error running ${platform.name} setup script:`, error);
         resolve(false);
       } else {
         log.info(`${platform.name} setup script completed successfully`);
         appMetadata.setSetupComplete();
-        notifyRenderer(mainWindow, 'complete', 'Setup complete');
+        notifyRenderer(mainWindow, 'setup-complete', 'Setup complete');
 
         dialog.showMessageBox({
           type: 'info',
@@ -73,7 +81,7 @@ async function checkAndRunFirstTimeSetup(
     appMetadata.setSetupComplete();
     notifyRenderer(
       mainWindow,
-      'complete',
+      'setup-complete',
       'Setup skipped for unsupported platform',
     );
     return true;
