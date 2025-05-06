@@ -14,15 +14,62 @@
 <div align="center">
   <h3>📥 Download Latest Release</h3>
   
-  [![macOS Download](https://img.shields.io/badge/macOS-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/latest/download/Cobolt.dmg)
-  [![Windows Download](https://img.shields.io/badge/Windows-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/latest/download/Cobolt.exe)
+  [![macOS Download](https://img.shields.io/badge/macOS-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.1/Cobolt-0.0.1.dmg)
+  [![Windows Download](https://img.shields.io/badge/Windows-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.1/Cobolt-Setup-0.0.1.exe)
   
-  <sub>For other platforms and previous versions, visit our [Releases](https://github.com/platinum-hill/cobolt/releases) page</sub>
+  <sub>This is an early release which is expected to be unstable and change significantly over time.
+  For other platforms and previous versions, visit our [Releases](https://github.com/platinum-hill/cobolt/releases) page</sub>
 </div>
 
 ## 🎯 Overview
 
-Cobolt is a powerful, cross-platform desktop application that revolutionizes your interaction with locally hosted AI models. Experience a seamless, intuitive interface while leveraging advanced features like persistent memory and extensible capabilities through the Model Context Protocol (MCP) framework.
+Cobolt is a cross-platform desktop application that enables you to get answers, and perform actions on the data that matters to you. Cobolt only stores data on your device, and uses locally running AI models. Cobolt can also remembers important details about you, and use it to give you personalized responses.And yes! your memories are stored on your device.
+You can connect to your favourite tools and data sources using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction).
+
+Feel like every query to a big tech AI is an automatic, non-consensual donation to their 'Make Our AI Smarter' fund, with zero transparency on how your 'donation' is used on some distant server farm? 💸🤷
+
+We believe that the AI assistants of the future will run on your device, and will not send your data, or queries to be used by tech companies for profit. 
+Small language models are closing the gap with their larger counterparts, and our devices are becoming more powerful. Cobolt is our effort to bring us closer to that future.
+
+Cobolt enables you to get answers based on your data, with a model of your choosing.
+
+## Key Differentiators
+
+- Local Models: Ensures that your data does not leave your device. We are powered by Ollama, which enables you to use the open source model of your choosing.  
+- Model Context Protocol Integration: Enables you to connect to the data sources, or tools that matter the most to you using MCP. This enables your model to access relevant tools and data, providing more useful, context aware responses.
+- Native Memory Support: Cobolt remembers the most important things about you, and uses this to give you more relevant responses.
+
+## How to?
+
+### How to change the model?
+By default we use [llama3.1:8b](https://ollama.com/library/llama3.1:8b) for inference, and [nomic-embed-text](nomic-embed-text) for embedding.
+
+You can use any Ollama model that supports tool calls listed [here](https://ollama.com/search?c=tools). 
+To download a new model for inference install it from Ollama
+
+```bash
+ollama ls # to view models
+ollama pull qwen3:8b # to download qwen3:8b
+```
+
+The downloaded model can be selected from the settings section on the app.
+
+> **Note:** If you want additional customization, you can update the models for tool use, inference, or embedding models individually:
+> 
+> On macOS: Edit `~/Library/Application Support/cobolt/config.json`
+> 
+> On Windows: Edit `%APPDATA%\cobolt\config.json`
+> 
+> After editing, restart Cobolt for changes to take effect.
+
+
+### How to add new integrations?
+You can find the most useful [MCP backed integrations here](https://github.com/modelcontextprotocol/servers). Add new MCP servers by adding new integrations through the application. The application will direct you to a JSON file to add your MCP server. We use the same format as Claude Desktop to make it easier for you to add new servers.
+
+The configuration for integrations that we recommend for new users should are available at [sample-mcp-server.json](https://github.com/platinum-hill/cobolt/blob/main/sample-mcp-server.json).
+
+Restart the application after you have added the required servers.
+
 
 ## 🤝 Contributing
 
