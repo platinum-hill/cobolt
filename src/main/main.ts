@@ -9,7 +9,7 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import log from 'electron-log/main';
 import { v4 as uuidv4 } from 'uuid';
 import MenuBuilder from './menu';
@@ -89,12 +89,73 @@ const closeLoadingWindow = () => {
   }
 };
 
+// Add this function to display error dialogs consistently
+const showErrorDialog = async (title: string, error: Error | string) => {
+  const errorMessage = error instanceof Error ? error.message : error;
+  let detailText = error instanceof Error && error.stack ? error.stack : '';
+
+  log.error(`${title}: ${errorMessage}`);
+  if (detailText) log.error(detailText);
+
+  // For MCP connection errors, include more specific details in the dialog
+  if (
+    title.includes('MCP') &&
+    McpClient.lastConnectionErrors &&
+    McpClient.lastConnectionErrors.length > 0
+  ) {
+    // Format MCP connection errors for display
+    const mcpErrorDetails = McpClient.lastConnectionErrors
+      .map((err) => {
+        return `
+Server: ${err.serverName}
+Command: ${err.serverCommand}
+Error: ${err.error.message || 'Unknown error'}`;
+      })
+      .join('\n\n-------------------\n');
+
+    // Include a note about editing the config file
+    const configHelp =
+      '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
+
+    // Use the detailed MCP errors as the detail text
+    detailText = mcpErrorDetails + configHelp;
+  }
+
+  const dialogOptions = {
+    type: 'error' as const,
+    title,
+    message: errorMessage,
+    detail: detailText,
+    buttons: ['OK'],
+    defaultId: 0,
+    cancelId: 0,
+    backgroundColor: '#1E2329', // Dark theme matching app
+    color: '#C5D8BC',
+  };
+
+  // If mainWindow exists, show modal on it, otherwise show non-modal dialog
+  const result = mainWindow
+    ? await dialog.showMessageBox(mainWindow, dialogOptions)
+    : await dialog.showMessageBox(dialogOptions);
+
+  return result;
+};
+
 const runFirstTimeSetup = async () => {
   if (!appMetadata.getSetupComplete()) {
     createLoadingWindow();
-    const setupSuccessful = await checkAndRunFirstTimeSetup(loadingWindow);
-    if (!setupSuccessful) {
-      log.error('First-time setup failed. Exiting application.');
+    try {
+      const setupSuccessful = await checkAndRunFirstTimeSetup(loadingWindow);
+      if (!setupSuccessful) {
+        await showErrorDialog(
+          'Setup Error',
+          'First-time setup failed. The application will now exit.',
+        );
+        closeLoadingWindow();
+        app.quit();
+      }
+    } catch (error) {
+      await showErrorDialog('Setup Error', error as Error);
       closeLoadingWindow();
       app.quit();
     }
@@ -109,7 +170,9 @@ const createWindow = async () => {
   await runFirstTimeSetup();
 
   await initDependencies();
-  await McpClient.connectToSevers();
+
+  // Handle MCP server connections
+  const mcpStatus = await McpClient.connectToSevers();
 
   const getAssetPath = (...paths: string[]): string => {
     return path.join(RESOURCES_PATH, ...paths);
@@ -129,7 +192,8 @@ const createWindow = async () => {
     },
   });
   mainWindow.loadURL(resolveHtmlPath('index.html'));
-  mainWindow.on('ready-to-show', () => {
+
+  mainWindow.on('ready-to-show', async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
@@ -140,6 +204,35 @@ const createWindow = async () => {
       mainWindow.minimize();
     } else {
       mainWindow.show();
+    }
+
+    // Show MCP connection errors after the window is shown
+    if (mcpStatus.errors.length > 0) {
+      // Wait a bit for the UI to fully load before showing errors
+      setTimeout(async () => {
+        // If all servers failed, show a critical error
+        if (!mcpStatus.success) {
+          await showErrorDialog(
+            'MCP Connection Error',
+            'Failed to connect to any MCP server. Some functionality will be unavailable.',
+          );
+        } else {
+          // If some servers succeeded but others failed, show a warning
+          const failedServers = mcpStatus.errors
+            .map((err) => err.serverName)
+            .join(', ');
+          await showErrorDialog(
+            'MCP Connection Warning',
+            `Connected to some MCP servers, but failed to connect to: ${failedServers}. Some tools may be unavailable.`,
+          );
+        }
+
+        // Also notify the renderer that it can show a detailed error report
+        mainWindow?.webContents.send('mcp-connection-status', {
+          success: mcpStatus.success,
+          hasErrors: mcpStatus.errors.length > 0,
+        });
+      }, 1000); // Delay showing dialog to ensure UI is fully loaded
     }
   });
 
@@ -304,10 +397,21 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
     return true;
   } catch (error) {
     log.error('Error processing message:', error);
+
+    // Send error to renderer for chat display
     mainWindow?.webContents.send(
       'message-response',
       'Sorry, I encountered an error processing your message.',
     );
+
+    // Only show dialog for critical errors, not for every message error
+    if (
+      error instanceof Error &&
+      (error.message.includes('connection') || error.message.includes('fatal'))
+    ) {
+      await showErrorDialog('Message Processing Error', error);
+    }
+
     return false;
   }
 });
@@ -453,6 +557,30 @@ ipcMain.handle('list-tools', () => {
   }));
 });
 
+// Add this IPC handler
+
+ipcMain.handle('get-mcp-connection-errors', () => {
+  // This will allow the frontend to request the detailed error information if needed
+  return McpClient.lastConnectionErrors || [];
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  showErrorDialog('Unexpected Error', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  showErrorDialog('Unhandled Promise Rejection', reason as Error);
+});
+
+// Handle renderer process crashes
+app.on('render-process-gone', (_, webContents, details) => {
+  showErrorDialog(
+    'Renderer Process Crashed',
+    `Process: ${webContents.getTitle()}\nReason: ${details.reason}`,
+  );
+});
+
 /**
  * Add event listeners...
  */
@@ -468,11 +596,30 @@ app.on('window-all-closed', () => {
 app
   .whenReady()
   .then(async () => {
-    createWindow();
-    app.on('activate', () => {
-      // On macOS it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (mainWindow === null) createWindow();
+    await createWindow();
+    app.on('activate', async () => {
+      if (mainWindow === null) await createWindow();
     });
   })
-  .catch(console.log);
+  .catch(async (error) => {
+    log.error('Application failed to start:', error);
+    try {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Application Startup Error',
+        message: error instanceof Error ? error.message : String(error),
+        detail: error instanceof Error && error.stack ? error.stack : '',
+        buttons: ['OK'],
+        defaultId: 0,
+      });
+    } catch (dialogError) {
+      log.error('Failed to show startup error dialog:', dialogError);
+    } finally {
+      app.quit();
+    }
+  });
+
+ipcMain.handle('report-error', async (_, errorMessage: string) => {
+  await showErrorDialog('Application Error', errorMessage);
+  return { handled: true };
+});

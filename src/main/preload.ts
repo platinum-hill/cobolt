@@ -73,5 +73,15 @@ contextBridge.exposeInMainWorld('electron', {
 
       throw new Error(`Unauthorized IPC channel: ${channel}`);
     },
+    on: (channel: string, listener: (...args: any[]) => void) => {
+      ipcRenderer.on(channel, listener);
+    },
+  },
+  errorHandling: {
+    reportError: (error: Error | string) =>
+      ipcRenderer.invoke(
+        'report-error',
+        error instanceof Error ? error.toString() : error,
+      ),
   },
 });
