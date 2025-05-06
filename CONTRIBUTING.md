@@ -51,9 +51,9 @@ Dependencies required to build the application include:
 
    **Windows**
 
-    First, install [nvm for windows](https://github.com/coreybutler/nvm-windows)
     ```bash
     # in a powershell terminal
+    winget install --id=CoreyButler.NVMforWindows -e
     nvm install 22.14.0
     node --version  # Verify installation
     ```

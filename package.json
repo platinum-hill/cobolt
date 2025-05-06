@@ -29,6 +29,7 @@
     "test:all": "jest --runInBand",
     "test:app": "jest --runInBand ./App",
     "test": "jest --runInBand __tests__",
+    "test:dev": "cross-env BYPASS_BUILD_CHECK=true jest --runInBand __tests__",
     "install:all": "cd ./release/app && npm install && cd ../.. && npm install",
     "precommit": "npm run lint",
     "prepush": "npm run rebuild && npm run build && npm run test:all",
