@@ -1,6 +1,6 @@
 {
   "name": "cobolt",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Your personal AI companion",
   "keywords": [],
   "repository": {
@@ -165,8 +165,8 @@
       "package.json"
     ],
     "mac": {
-      "sign": false,
-      "notarize": false,
+      "sign": "scripts/notarize.js",
+      "notarize": true,
       "target": {
         "target": "default",
         "arch": [

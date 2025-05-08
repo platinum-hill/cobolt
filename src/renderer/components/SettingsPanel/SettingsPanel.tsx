@@ -386,7 +386,7 @@ function SettingsPanel({
         </div>
 
         <div className="about-section">
-          <p>Version 0.0.2</p>
+          <p>Version 0.0.3</p>
           <p>© 2025 Cobolt</p>
         </div>
       </div>
