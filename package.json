@@ -166,7 +166,9 @@
     ],
     "mac": {
       "sign": "scripts/notarize.js",
-      "notarize": true,
+      "notarize": {
+        "teamId": "5U7KRJTAG4"
+      },
       "target": {
         "target": "default",
         "arch": [
