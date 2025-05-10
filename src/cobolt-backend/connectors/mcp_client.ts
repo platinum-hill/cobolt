@@ -8,6 +8,7 @@ import { McpTool } from "../ollama_tools";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types";
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
 import { log } from "electron-log/main";
+import { errorManager, ErrorCategory } from '../utils/error_manager';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -15,12 +16,10 @@ dotenv.config();
 class MCPClient {
     private clients: Client[];
     toolCache: McpTool[];
-    lastConnectionErrors: any[] = []; 
 
     constructor() {
         this.clients = [];
         this.toolCache = [];
-        this.lastConnectionErrors = [];
     }
 
     async installMcpServer() {
@@ -42,6 +41,14 @@ class MCPClient {
                 atLeastOneSuccess = true;
             } catch (error) {
                 log.error(`Failed to connect to MCP server ${server.name}:`, error);
+                
+                // Report error to central error manager
+                errorManager.reportConnectionError(
+                    server.name,
+                    `${server.command} ${server.args.join(' ')}`,
+                    error
+                );
+                
                 errors.push({
                     serverName: server.name,
                     serverCommand: `${server.command} ${server.args.join(' ')}`,
@@ -49,13 +56,11 @@ class MCPClient {
                         { message: error.message, stack: error.stack } : 
                         { message: String(error) }
                 });
+                
                 // Continue to the next server instead of throwing immediately
                 continue;
             }
         }
-
-        // Store the errors for later reference
-        this.lastConnectionErrors = errors;
 
         // update toolCache with the connected clients
         if (atLeastOneSuccess) {
@@ -69,6 +74,13 @@ class MCPClient {
                 ? "Failed to connect to any MCP server" 
                 : undefined
         };
+    }
+
+    // Helper method to get connection errors from error manager
+    get lastConnectionErrors() {
+        const errors = errorManager.getErrors(ErrorCategory.MCP_CONNECTION);
+        if (errors.length === 0) return null;
+        return errors;
     }
 
     private async connectToMcpServer(server: MCPServer) {

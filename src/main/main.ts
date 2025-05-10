@@ -31,6 +31,10 @@ import {
 import { McpClient } from '../cobolt-backend/connectors/mcp_client';
 import { updateMemoryEnabled } from '../cobolt-backend/memory';
 import checkAndRunFirstTimeSetup from './setup';
+import {
+  errorManager,
+  ErrorCategory,
+} from '../cobolt-backend/utils/error_manager';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -97,28 +101,33 @@ const showErrorDialog = async (title: string, error: Error | string) => {
   log.error(`${title}: ${errorMessage}`);
   if (detailText) log.error(detailText);
 
-  // For MCP connection errors, include more specific details in the dialog
-  if (
-    title.includes('MCP') &&
-    McpClient.lastConnectionErrors &&
-    McpClient.lastConnectionErrors.length > 0
-  ) {
-    // Format MCP connection errors for display
-    const mcpErrorDetails = McpClient.lastConnectionErrors
-      .map((err) => {
-        return `
-Server: ${err.serverName}
-Command: ${err.serverCommand}
-Error: ${err.error.message || 'Unknown error'}`;
-      })
-      .join('\n\n-------------------\n');
+  // For MCP connection errors
+  if (title.includes('MCP Connection')) {
+    const mcpErrorDetails = errorManager.formatErrors(
+      ErrorCategory.MCP_CONNECTION,
+    );
 
-    // Include a note about editing the config file
-    const configHelp =
-      '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
+    if (mcpErrorDetails) {
+      // Include a note about editing the config file
+      const configHelp =
+        '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
 
-    // Use the detailed MCP errors as the detail text
-    detailText = mcpErrorDetails + configHelp;
+      // Use the detailed MCP errors as the detail text
+      detailText = mcpErrorDetails + configHelp;
+    }
+  }
+
+  // For MCP config errors
+  if (title.includes('MCP Config')) {
+    const configErrorDetails = errorManager.formatErrors(
+      ErrorCategory.MCP_CONFIG,
+    );
+
+    if (configErrorDetails) {
+      detailText = `${
+        configErrorDetails
+      }\n\nYou may need to fix or recreate the MCP configuration file. MCP Servers will not work till this is fixed.`;
+    }
   }
 
   const dialogOptions = {
@@ -171,7 +180,11 @@ const createWindow = async () => {
 
   await initDependencies();
 
-  // Handle MCP server connections
+  // Store config error status but don't show dialog yet
+  const hasMcpConfigErrors =
+    errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
+
+  // Handle MCP server connections (still try to connect even with config errors)
   const mcpStatus = await McpClient.connectToSevers();
 
   const getAssetPath = (...paths: string[]): string => {
@@ -206,10 +219,18 @@ const createWindow = async () => {
       mainWindow.show();
     }
 
-    // Show MCP connection errors after the window is shown
-    if (mcpStatus.errors.length > 0) {
-      // Wait a bit for the UI to fully load before showing errors
-      setTimeout(async () => {
+    // Wait a bit for the UI to fully load before showing errors
+    setTimeout(async () => {
+      // First show config errors if any exist
+      if (hasMcpConfigErrors) {
+        await showErrorDialog(
+          'MCP Config Error',
+          'There was an error with the MCP servers configuration file.',
+        );
+      }
+
+      // Then show MCP connection errors if any exist
+      if (mcpStatus.errors.length > 0) {
         // If all servers failed, show a critical error
         if (!mcpStatus.success) {
           await showErrorDialog(
@@ -232,8 +253,8 @@ const createWindow = async () => {
           success: mcpStatus.success,
           hasErrors: mcpStatus.errors.length > 0,
         });
-      }, 1000); // Delay showing dialog to ensure UI is fully loaded
-    }
+      }
+    }, 1000); // Delay showing dialog to ensure UI is fully loaded
   });
 
   mainWindow.on('closed', () => {
@@ -557,11 +578,14 @@ ipcMain.handle('list-tools', () => {
   }));
 });
 
-// Add this IPC handler
-
+// Replace the existing handler
 ipcMain.handle('get-mcp-connection-errors', () => {
-  // This will allow the frontend to request the detailed error information if needed
-  return McpClient.lastConnectionErrors || [];
+  return errorManager.getErrors(ErrorCategory.MCP_CONNECTION);
+});
+
+// Add a new handler for any error category
+ipcMain.handle('get-errors', (_, category) => {
+  return errorManager.getErrors(category);
 });
 
 // Global error handlers

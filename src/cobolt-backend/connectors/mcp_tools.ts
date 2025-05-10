@@ -1,6 +1,8 @@
 import { app } from 'electron';
+import Logger from 'electron-log/main';
 import * as fs from 'fs';
 import * as path from 'path';
+import { errorManager } from '../utils/error_manager';
 
 interface MCPServerEnv {
     [key: string]: string;
@@ -33,7 +35,15 @@ try {
         fs.writeFileSync(configPath, JSON.stringify(configJson, null, 2), 'utf8');
     }
 } catch (error) {
-    console.error(`Error reading or creating config file: ${error}`);
+    Logger.error(`Error reading or creating config file: ${error}`);
+    
+    // Report to central error manager
+    errorManager.reportConfigError(
+        fs.existsSync(configPath) ? 'reading' : 'creating',
+        configPath,
+        error
+    );
+    
     configJson = { mcpServers: {} };
 }
 
