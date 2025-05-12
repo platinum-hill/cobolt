@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio";
 import dotenv from "dotenv";
-import { log } from "electron-log/main";
+import log from "electron-log/main";
 import { MCPServer, mcpServers } from "./mcp_tools";
 import { RequestContext, TraceLogger } from "../logger";
 import { ToolCall } from "ollama";

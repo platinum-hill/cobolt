@@ -30,10 +30,9 @@ const mcpServers: MCPServer[] = [];
  * @returns Result of the operation
  */
 function loadConfig() {
+    const appDataPath = app.getPath('userData');
+    const configPath = path.resolve(appDataPath, 'mcp-servers.json');
     try {
-        // Define path once
-        const appDataPath = app.getPath('userData');
-        const configPath = path.resolve(appDataPath, 'mcp-servers.json');
         // Clear existing entries first if reloading
         mcpServers.length = 0;
         

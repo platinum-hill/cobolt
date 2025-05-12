@@ -86,6 +86,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.removeAllListeners('setup-progress');
   },
 
+  // Error dialog events
+  onErrorDialog: (callback: (data: any) => void) => {
+    ipcRenderer.on('show-error-dialog', (_, data) => callback(data));
+  },
+  removeErrorDialogListener: () => {
+    ipcRenderer.removeAllListeners('show-error-dialog');
+  },
+
   // Tools
   listTools: () => ipcRenderer.invoke('list-tools'),
   openMcpServersFile: () => ipcRenderer.invoke('open-mcp-servers-file'),
@@ -106,8 +114,6 @@ contextBridge.exposeInMainWorld('electron', {
     on: (channel: string, callback: (...args: any[]) => void) => {
       if (validChannels.on.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
-      } else {
-        console.warn(`Unauthorized IPC channel subscription: ${channel}`);
       }
     },
 
@@ -115,8 +121,6 @@ contextBridge.exposeInMainWorld('electron', {
     removeAllListeners: (channel: string) => {
       if (validChannels.on.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
-      } else {
-        console.warn(`Unauthorized IPC channel removal: ${channel}`);
       }
     },
   },

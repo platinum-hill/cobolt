@@ -9,11 +9,9 @@ function ErrorDialog() {
   const [detail, setDetail] = useState<string | undefined>('');
 
   useEffect(() => {
-    // Listen for error messages from the main process
-    window.electron.ipcRenderer.on('show-error-dialog', (data: any) => {
+    // Create handler function
+    const handleErrorDialog = (data: any) => {
       setTitle(data.title);
-
-      // Format the message
       setMessage(data.message);
 
       // Format detailed error information based on error type
@@ -33,11 +31,14 @@ function ErrorDialog() {
 
       setDetail(formattedDetail);
       setIsOpen(true);
-    });
+    };
+
+    // Add the event listener using the proper API
+    window.api.onErrorDialog(handleErrorDialog);
 
     return () => {
       // Clean up listener
-      window.electron.ipcRenderer.removeAllListeners('show-error-dialog');
+      window.api.removeErrorDialogListener();
     };
   }, []);
 
