@@ -379,7 +379,7 @@
   transition: all 0.2s ease;
   opacity: 0.8;
 }
-/* Model Selection Section */
+/* Model Selection Section - standardize with action-row pattern */
 .model-selection-section {
   padding: 16px 24px;
   border-top: 1px solid rgba(124, 169, 126, 0.15);
@@ -395,15 +395,17 @@
   opacity: 0.9;
 }
 
+/* Replace model-dropdown-container with standardized action-row */
 .model-dropdown-container {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
   margin-bottom: 10px;
 }
 
 .model-dropdown {
-  flex-grow: 1;
+  flex: 1;
   padding: 10px 14px;
   background: transparent;
   color: #C5D8BC;
@@ -412,6 +414,12 @@
   font-size: 0.9rem;
   transition: all 0.2s ease;
   opacity: 0.8;
+}
+
+/* Remove specific styling for model dropdown refresh button - use action-button instead */
+.model-dropdown-container .refresh-button {
+  width: 40px;
+  height: 40px;
 }
 
 .toggle-setting:hover {
@@ -498,16 +506,18 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;  /* Change from 36px to 40px */
+  height: 40px; /* Change from 36px to 40px */
   background: transparent;
   color: #C5D8BC;
   border: 1px solid rgba(124, 169, 126, 0.15);
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 18px; /* Update from 16px to 18px to match */
   cursor: pointer;
   transition: all 0.2s ease;
   opacity: 0.8;
+  padding: 0;
+  margin: 0;
 }
 
 .refresh-button:hover {
@@ -664,3 +674,163 @@
   right: 10px;
   background-color: rgba(42, 47, 53, 0.9);
 }
+
+/* Add these CSS rules to your SettingsPanel.css file */
+
+.integrations-container {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.integrations-container .settings-button {
+  flex: 1;
+  height: 40px;
+}
+
+.integrations-container .refresh-button {
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  padding: 0;
+  margin: 0;
+}
+
+/* Standardized container for settings with action buttons */
+.action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+/* Main content button (takes available space) */
+.action-row .primary-button {
+  flex: 1;
+  height: 40px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+}
+
+/* Action button (fixed width) */
+.action-row .action-button {
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 18px;
+}
+
+/* Update refresh button styling to match other buttons */
+.action-button.refresh-button {
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 18px;
+  background: transparent;
+  color: #C5D8BC;
+  border: 1px solid rgba(124, 169, 126, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.action-button.refresh-button:hover {
+  background-color: rgba(124, 169, 126, 0.08);
+  border-color: rgba(143, 185, 150, 0.3);
+  opacity: 1;
+}
+
+.action-button.refresh-button:active {
+  transform: scale(0.95);
+}
+
+.action-button.refresh-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------
+   Refresh buttons – keep them the same size everywhere
+   -------------------------------------------------- */
+.action-button.refresh-button {
+  width: 2.5rem;      /* 40 px */
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  flex-shrink: 0;     /* block flexbox from squeezing it */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --------------------------------------------------
+   Align both “refresh” rows so the buttons line up
+   -------------------------------------------------- */
+
+/* Give the integrations row the same flex container as the model row */
+.integrations-container .action-row,
+.model-dropdown-container {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Let the main integrations button stretch across the whole row
+   so its refresh button sits on the same X-axis as the model one */
+.integrations-container .primary-button {
+  flex: 1 1 0;
+  width: 100%;   /* was “auto” – make it fill the row again */
+}
+
+/* --------------------------------------------------
+   Align buttons vertically in settings panel
+   -------------------------------------------------- */
+
+/* Standardize the container widths */
+.model-dropdown-container,
+.integrations-container .action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 0;  /* Ensure no extra padding */
+}
+
+/* Make both primary elements the same width */
+.model-dropdown,
+.integrations-container .primary-button {
+  flex: 1 1 auto;
+  min-width: 0;      /* Allow shrinking if needed */
+}
+
+/* Make refresh buttons the exact same width and position */
+.model-dropdown-container .refresh-button,
+.integrations-container .refresh-button {
+  width: 40px;
+  min-width: 40px;   /* Prevent shrinking */
+  flex-shrink: 0;    /* Prevent shrinking */
+  margin: 0;         /* Remove any potential margins */
+}
+
+/* Ensure both rows have identical structure */
+.model-dropdown-container,
+.integrations-container .action-row {
+  justify-content: space-between; /* Push refresh buttons to the right edge */
+}
+
+

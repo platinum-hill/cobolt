@@ -35,6 +35,7 @@ import {
   errorManager,
   ErrorCategory,
 } from '../cobolt-backend/utils/error_manager';
+import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -133,28 +134,6 @@ const showErrorDialog = async (title: string, error: Error | string) => {
     backgroundColor: '#1E2329',
     color: '#C5D8BC',
   };
-
-  // For MCP connection errors, enhance the detail in native dialog too
-  if (title.includes('MCP Connection')) {
-    const mcpErrorDetails = errorManager.formatErrors(
-      ErrorCategory.MCP_CONNECTION,
-    );
-    if (mcpErrorDetails) {
-      dialogOptions.detail = `${
-        mcpErrorDetails
-      }\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.`;
-    }
-  }
-
-  // For MCP config errors, enhance the detail in native dialog too
-  if (title.includes('MCP Config')) {
-    const configErrorDetails = errorManager.formatErrors(
-      ErrorCategory.MCP_CONFIG,
-    );
-    if (configErrorDetails) {
-      dialogOptions.detail = `${configErrorDetails}\n\nYou may need to fix or recreate the MCP configuration file. MCP Servers will not work till this is fixed.`;
-    }
-  }
 
   const result = await dialog.showMessageBox(dialogOptions);
   return result;
@@ -596,6 +575,76 @@ ipcMain.handle('get-mcp-connection-errors', () => {
 // Add a new handler for any error category
 ipcMain.handle('get-errors', (_, category) => {
   return errorManager.getErrors(category);
+});
+
+// Add this handler where other IPC handlers are defined
+ipcMain.handle('refresh-mcp-connections', async () => {
+  try {
+    errorManager.clearErrors(ErrorCategory.MCP_CONFIG);
+    errorManager.clearErrors(ErrorCategory.MCP_CONNECTION);
+
+    loadConfig();
+
+    // Check for config errors after loading
+    const hasMcpConfigErrors =
+      errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
+    if (hasMcpConfigErrors) {
+      await showErrorDialog(
+        'MCP Config Error',
+        'There was an error with the MCP servers configuration file.',
+      );
+    }
+
+    // Connect to servers with the updated configuration
+    const result = await McpClient.connectToSevers();
+
+    // Show connection errors if any exist
+    if (result.errors.length > 0) {
+      if (!result.success) {
+        await showErrorDialog(
+          'MCP Connection Error',
+          'Failed to connect to any MCP server. Some functionality will be unavailable.',
+        );
+      } else {
+        // If some servers succeeded but others failed, show a warning
+        const failedServers = result.errors
+          .map((err) => err.serverName)
+          .join(', ');
+        await showErrorDialog(
+          'MCP Connection Warning',
+          `Connected to some MCP servers, but failed to connect to: ${failedServers}. Some tools may be unavailable.`,
+        );
+      }
+    }
+
+    // Notify the renderer about the updated connection status
+    if (mainWindow) {
+      mainWindow.webContents.send('mcp-connection-status', {
+        success: result.success,
+        hasErrors: result.errors.length > 0,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    log.error('Error refreshing MCP connections:', error);
+    await showErrorDialog(
+      'MCP Refresh Error',
+      error instanceof Error ? error.message : String(error),
+    );
+    return {
+      success: false,
+      errors: [
+        {
+          serverName: 'Configuration',
+          error:
+            error instanceof Error
+              ? { message: error.message, stack: error.stack }
+              : { message: String(error) },
+        },
+      ],
+    };
+  }
 });
 
 // Global error handlers

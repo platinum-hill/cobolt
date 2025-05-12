@@ -26,6 +26,7 @@ const validChannels = {
     'get-config',
     'update-core-models',
     'report-error',
+    'refresh-mcp-connections',
   ],
   on: [
     'message-response',

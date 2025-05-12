@@ -254,6 +254,27 @@ function SettingsPanel({
     return message.length > 60 ? `${message.substring(0, 60)}...` : message;
   };
 
+  const handleRefreshMcp = async () => {
+    try {
+      setIsLoading(true);
+
+      // Call backend to reconnect MCP servers
+      const result = await window.electron.ipcRenderer.invoke(
+        'refresh-mcp-connections',
+      );
+
+      if (!result.success) {
+        log.error(result.errorMessage || 'Failed to refresh MCP connections');
+      } else {
+        log.info('Successfully refreshed MCP connections');
+      }
+    } catch (error) {
+      log.error('Error refreshing MCP connections:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <div
@@ -346,7 +367,7 @@ function SettingsPanel({
             </select>
             <button
               type="button"
-              className="refresh-button"
+              className="action-button refresh-button"
               onClick={fetchModelsData}
               disabled={isLoading}
               aria-label="Refresh models"
@@ -376,13 +397,26 @@ function SettingsPanel({
               />
             </div>
           </div>
-          <button
-            type="button"
-            className="settings-button"
-            onClick={() => setIsToolInfoOpen(true)}
-          >
-            Integrations
-          </button>
+          <div className="integrations-container">
+            <div className="action-row">
+              <button
+                type="button"
+                className="settings-button primary-button"
+                onClick={() => setIsToolInfoOpen(true)}
+              >
+                Integrations
+              </button>
+              <button
+                type="button"
+                className="action-button refresh-button"
+                onClick={handleRefreshMcp}
+                disabled={isLoading}
+                aria-label="Refresh integrations"
+              >
+                {isLoading ? '⟳' : '↻'}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="about-section">
