@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import log from 'electron-log/renderer';
 import ChatInterface from '../ChatInterface/ChatInterface';
 import SettingsPanel from '../SettingsPanel/SettingsPanel';
+import ErrorDialog from '../ErrorDialog/ErrorDialog';
 import './App.css';
 
 export default function App() {
@@ -59,6 +60,7 @@ export default function App() {
         onSelectChat={handleSelectChat}
         currentChatId={currentChatId}
       />
+      <ErrorDialog />
     </div>
   );
 }
