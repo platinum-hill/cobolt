@@ -12,24 +12,25 @@ function ErrorDialog() {
     // Listen for error messages from the main process
     window.electron.ipcRenderer.on('show-error-dialog', (data: any) => {
       setTitle(data.title);
-      
+
       // Format the message
       setMessage(data.message);
-      
+
       // Format detailed error information based on error type
       let formattedDetail = data.detail || '';
-      
+
       // For MCP connection errors, add helpful context
       if (data.title.includes('MCP Connection') && data.mcpErrorDetails) {
-        const configHelp = '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
+        const configHelp =
+          '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
         formattedDetail = data.mcpErrorDetails + configHelp;
       }
-      
+
       // For MCP config errors, add recovery instructions
       if (data.title.includes('MCP Config') && data.configErrorDetails) {
         formattedDetail = `${data.configErrorDetails}\n\nYou may need to fix or recreate the MCP configuration file. MCP Servers will not work till this is fixed.`;
       }
-      
+
       setDetail(formattedDetail);
       setIsOpen(true);
     });
