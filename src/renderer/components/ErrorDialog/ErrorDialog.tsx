@@ -9,7 +9,6 @@ function ErrorDialog() {
   const [detail, setDetail] = useState<string | undefined>('');
 
   useEffect(() => {
-    // Create handler function
     const handleErrorDialog = (data: any) => {
       setTitle(data.title);
       setMessage(data.message);
@@ -33,11 +32,9 @@ function ErrorDialog() {
       setIsOpen(true);
     };
 
-    // Add the event listener using the proper API
     window.api.onErrorDialog(handleErrorDialog);
 
     return () => {
-      // Clean up listener
       window.api.removeErrorDialogListener();
     };
   }, []);

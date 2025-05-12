@@ -21,12 +21,10 @@ interface MCPServersConfig {
     };
 }
 
-// Create a shared array for MCP servers
 const mcpServers: MCPServer[] = [];
 
 /**
  * Load MCP server configuration from file
- * @param createIfMissing Whether to create the config file if it doesn't exist
  * @returns Result of the operation
  */
 function loadConfig() {

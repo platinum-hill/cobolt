@@ -6,7 +6,6 @@ type Chat = {
   created_at: Date;
 };
 
-// Define all valid channels in one place for better maintenance
 const validChannels = {
   invoke: [
     'send-message',
@@ -99,7 +98,6 @@ contextBridge.exposeInMainWorld('api', {
   openMcpServersFile: () => ipcRenderer.invoke('open-mcp-servers-file'),
 });
 
-// Expose a more flexible, unified API for direct IPC access
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {
     // Invoke method with channel validation
@@ -110,7 +108,6 @@ contextBridge.exposeInMainWorld('electron', {
       throw new Error(`Unauthorized IPC channel: ${channel}`);
     },
 
-    // Unified on method for all event types
     on: (channel: string, callback: (...args: any[]) => void) => {
       if (validChannels.on.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));

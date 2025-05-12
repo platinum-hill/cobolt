@@ -94,8 +94,6 @@ const closeLoadingWindow = () => {
   }
 };
 
-// Replace the existing showErrorDialog function with this:
-
 const showErrorDialog = async (title: string, error: Error | string) => {
   const errorMessage = error instanceof Error ? error.message : error;
   const detailText = error instanceof Error && error.stack ? error.stack : '';
@@ -119,7 +117,7 @@ const showErrorDialog = async (title: string, error: Error | string) => {
   // If mainWindow exists and is ready, send the error to the React Modal in renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('show-error-dialog', errorData);
-    return { response: 0 }; // Simulate dialog response for compatibility
+    return { response: 0 };
   }
 
   // Fallback to native dialog if mainWindow doesn't exist (startup errors)

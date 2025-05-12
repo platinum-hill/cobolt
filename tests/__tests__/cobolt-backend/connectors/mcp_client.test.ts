@@ -119,10 +119,9 @@ describe('MCPClient', () => {
 
   test('throws when all servers fail to connect', async () => {
     // Both connections fail
-    const connectMock = jest
-      .fn()
-      .mockRejectedValueOnce(new Error('Test connection error 1'))
-      .mockRejectedValueOnce(new Error('Test connection error 2'));
+    const connectMock = jest.fn().mockImplementation(() => {
+      return Promise.reject(new Error('Test connection error'));
+    });
 
     const ClientMock =
       require('@modelcontextprotocol/sdk/client/index.js').Client;
@@ -134,13 +133,27 @@ describe('MCPClient', () => {
         .mockReturnValue({ name: 'test-server', version: '1.0.0' }),
     }));
 
-    // Should throw when all servers fail
-    await expect(McpClientInstance.connectToSevers()).rejects.toThrow(
-      'Failed to connect to any MCP server',
-    );
+    // First attempt - should try to connect to both servers but fail
+    const result = await McpClientInstance.connectToSevers();
 
-    // Should have tried connecting twice
+    // Verify connectMock was called twice (for both servers)
     expect(connectMock).toHaveBeenCalledTimes(2);
+
+    // Verify we got the expected result object with errors
+    expect(result.success).toBe(false);
+    expect(result.errors.length).toBe(2);
+    expect(result.errors[0]).toHaveProperty('serverName');
+    expect(result.errors[0]).toHaveProperty('error');
+    expect(result.errors[1]).toHaveProperty('serverName');
+    expect(result.errors[1]).toHaveProperty('error');
+    expect(result.errorMessage).toContain('Failed to connect');
+
+    // Create a separate test scenario for error handling
+    const errorResult = await McpClientInstance.connectToSevers();
+
+    // Verify the error result
+    expect(errorResult.success).toBe(false);
+    expect(errorResult.errorMessage).toContain('Failed to connect');
   });
 
   test('listAllConnectedTools returns tools from all clients', async () => {
