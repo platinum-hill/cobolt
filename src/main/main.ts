@@ -97,47 +97,27 @@ const closeLoadingWindow = () => {
 
 const showErrorDialog = async (title: string, error: Error | string) => {
   const errorMessage = error instanceof Error ? error.message : error;
-  let detailText = error instanceof Error && error.stack ? error.stack : '';
+  const detailText = error instanceof Error && error.stack ? error.stack : '';
 
   log.error(`${title}: ${errorMessage}`);
   if (detailText) log.error(detailText);
 
-  // For MCP connection errors
-  if (title.includes('MCP Connection')) {
-    const mcpErrorDetails = errorManager.formatErrors(
-      ErrorCategory.MCP_CONNECTION,
-    );
-
-    if (mcpErrorDetails) {
-      // Include a note about editing the config file
-      const configHelp =
-        '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
-
-      // Use the detailed MCP errors as the detail text
-      detailText = mcpErrorDetails + configHelp;
-    }
-  }
-
-  // For MCP config errors
-  if (title.includes('MCP Config')) {
-    const configErrorDetails = errorManager.formatErrors(
-      ErrorCategory.MCP_CONFIG,
-    );
-
-    if (configErrorDetails) {
-      detailText = `${
-        configErrorDetails
-      }\n\nYou may need to fix or recreate the MCP configuration file. MCP Servers will not work till this is fixed.`;
-    }
-  }
+  // Collect all error details to send to renderer
+  const errorData = {
+    title,
+    message: errorMessage,
+    detail: detailText,
+    mcpErrorDetails: title.includes('MCP Connection') 
+      ? errorManager.formatErrors(ErrorCategory.MCP_CONNECTION)
+      : null,
+    configErrorDetails: title.includes('MCP Config')
+      ? errorManager.formatErrors(ErrorCategory.MCP_CONFIG)
+      : null
+  };
 
   // If mainWindow exists and is ready, send the error to the React Modal in renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('show-error-dialog', {
-      title,
-      message: errorMessage,
-      detail: detailText,
-    });
+    mainWindow.webContents.send('show-error-dialog', errorData);
     return { response: 0 }; // Simulate dialog response for compatibility
   }
 
@@ -153,6 +133,23 @@ const showErrorDialog = async (title: string, error: Error | string) => {
     backgroundColor: '#1E2329',
     color: '#C5D8BC',
   };
+
+  // For MCP connection errors, enhance the detail in native dialog too
+  if (title.includes('MCP Connection')) {
+    const mcpErrorDetails = errorManager.formatErrors(ErrorCategory.MCP_CONNECTION);
+    if (mcpErrorDetails) {
+      dialogOptions.detail = mcpErrorDetails + 
+        '\n\nYou can edit the MCP servers configuration file from Settings to fix this issue.';
+    }
+  }
+
+  // For MCP config errors, enhance the detail in native dialog too
+  if (title.includes('MCP Config')) {
+    const configErrorDetails = errorManager.formatErrors(ErrorCategory.MCP_CONFIG);
+    if (configErrorDetails) {
+      dialogOptions.detail = `${configErrorDetails}\n\nYou may need to fix or recreate the MCP configuration file. MCP Servers will not work till this is fixed.`;
+    }
+  }
 
   const result = await dialog.showMessageBox(dialogOptions);
   return result;
