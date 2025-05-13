@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - ga/mac-signing-fix
 
 jobs:
   publish:

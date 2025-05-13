@@ -159,13 +159,13 @@
     "appId": "org.platinumhill.cobolt",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
+    "afterSign": "scripts/notarize.js",
     "files": [
       "dist",
       "node_modules",
       "package.json"
     ],
     "mac": {
-      "sign": "scripts/notarize.js",
       "notarize": true,
       "target": {
         "target": "default",
