@@ -159,13 +159,13 @@
     "appId": "org.platinumhill.cobolt",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
+    "afterSign": "scripts/notarize.js",
     "files": [
       "dist",
       "node_modules",
       "package.json"
     ],
     "mac": {
-      "sign": "scripts/notarize.js",
       "notarize": true,
       "target": {
         "target": "default",
@@ -175,11 +175,10 @@
         ]
       },
       "type": "distribution",
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
-      "gatekeeperAssess": false,
-      "identity": null
+      "gatekeeperAssess": false
     },
     "dmg": {
       "contents": [
