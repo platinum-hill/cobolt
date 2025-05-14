@@ -66,9 +66,9 @@ The downloaded model can be selected from the settings section on the app.
 ### How to add new integrations?
 You can find the most useful [MCP backed integrations here](https://github.com/modelcontextprotocol/servers). Add new MCP servers by adding new integrations through the application. The application will direct you to a JSON file to add your MCP server. We use the same format as Claude Desktop to make it easier for you to add new servers.
 
-The configuration for integrations that we recommend for new users should are available at [sample-mcp-server.json](https://github.com/platinum-hill/cobolt/blob/main/sample-mcp-server.json).
+Some integrations that we recommend for new users are available at [sample-mcp-server.json](https://github.com/platinum-hill/cobolt/blob/main/sample-mcp-server.json).
 
-Restart the application after you have added the required servers.
+Restart the application, or reload the integrations after you have added the required servers.
 
 
 ## 🤝 Contributing
