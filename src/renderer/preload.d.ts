@@ -39,6 +39,18 @@ declare global {
       getMemoryEnabled: () => Promise<boolean>;
       setMemoryEnabled: (enabled: boolean) => Promise<boolean>;
       openMcpServersFile: () => Promise<{ success: boolean; message: string }>;
+
+      // Error dialog related methods
+      onErrorDialog: (
+        callback: (data: {
+          title: string;
+          message: string;
+          detail?: string;
+          mcpErrorDetails?: string;
+          configErrorDetails?: string;
+        }) => void,
+      ) => void;
+      removeErrorDialogListener: () => void;
     };
     electron: {
       ipcRenderer: {

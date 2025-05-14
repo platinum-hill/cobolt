@@ -1,13 +1,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio";
 import dotenv from "dotenv";
-import log from 'electron-log/main';
+import log from "electron-log/main";
 import { MCPServer, mcpServers } from "./mcp_tools";
 import { RequestContext, TraceLogger } from "../logger";
 import { ToolCall } from "ollama";
 import { McpTool } from "../ollama_tools";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types";
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
+import { errorManager, ErrorCategory } from '../utils/error_manager';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -28,6 +29,7 @@ class MCPClient {
     /**
      * Connects to all MCP servers defined in the JSON configuration file.
      * Updates the toolCache with the connected clients.
+     * @returns An object with connection status and any errors encountered
      */
     async connectToSevers() {
         let atLeastOneSuccess = false;
@@ -39,23 +41,46 @@ class MCPClient {
                 atLeastOneSuccess = true;
             } catch (error) {
                 log.error(`Failed to connect to MCP server ${server.name}:`, error);
+                
+                // Report error to central error manager
+                errorManager.reportConnectionError(
+                    server.name,
+                    `${server.command} ${server.args.join(' ')}`,
+                    error
+                );
+                
                 errors.push({
-                    server: `${server.command} ${server.args}`,
-                    error: error
+                    serverName: server.name,
+                    serverCommand: `${server.command} ${server.args.join(' ')}`,
+                    error: error instanceof Error ? 
+                        { message: error.message, stack: error.stack } : 
+                        { message: String(error) }
                 });
+                
                 // Continue to the next server instead of throwing immediately
                 continue;
             }
         }
 
-        // Only throw an error if all servers failed
-        if (!atLeastOneSuccess && errors.length > 0) {
-            log.error("All MCP servers failed to connect:", errors);
-            throw new Error("Failed to connect to any MCP server");
+        // update toolCache with the connected clients
+        if (atLeastOneSuccess) {
+            this.toolCache = await this.listAllConnectedTools();
         }
 
-        // update toolCache with the connected clients
-        this.toolCache = await this.listAllConnectedTools();
+        return {
+            success: atLeastOneSuccess,
+            errors: errors,
+            errorMessage: !atLeastOneSuccess && errors.length > 0 
+                ? "Failed to connect to any MCP server" 
+                : undefined
+        };
+    }
+
+    // Helper method to get connection errors from error manager
+    get lastConnectionErrors() {
+        const errors = errorManager.getErrors(ErrorCategory.MCP_CONNECTION);
+        if (errors.length === 0) return null;
+        return errors;
     }
 
     private async connectToMcpServer(server: MCPServer) {

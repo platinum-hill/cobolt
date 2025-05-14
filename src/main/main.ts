@@ -9,7 +9,7 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import log from 'electron-log/main';
 import { v4 as uuidv4 } from 'uuid';
 import MenuBuilder from './menu';
@@ -31,6 +31,11 @@ import {
 import { McpClient } from '../cobolt-backend/connectors/mcp_client';
 import { updateMemoryEnabled } from '../cobolt-backend/memory';
 import checkAndRunFirstTimeSetup from './setup';
+import {
+  errorManager,
+  ErrorCategory,
+} from '../cobolt-backend/utils/error_manager';
+import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -89,12 +94,64 @@ const closeLoadingWindow = () => {
   }
 };
 
+const showErrorDialog = async (title: string, error: Error | string) => {
+  const errorMessage = error instanceof Error ? error.message : error;
+  const detailText = error instanceof Error && error.stack ? error.stack : '';
+
+  log.error(`${title}: ${errorMessage}`);
+  if (detailText) log.error(detailText);
+
+  // Collect all error details to send to renderer
+  const errorData = {
+    title,
+    message: errorMessage,
+    detail: detailText,
+    mcpErrorDetails: title.includes('MCP Connection')
+      ? errorManager.formatErrors(ErrorCategory.MCP_CONNECTION)
+      : null,
+    configErrorDetails: title.includes('MCP Config')
+      ? errorManager.formatErrors(ErrorCategory.MCP_CONFIG)
+      : null,
+  };
+
+  // If mainWindow exists and is ready, send the error to the React Modal in renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('show-error-dialog', errorData);
+    return { response: 0 };
+  }
+
+  // Fallback to native dialog if mainWindow doesn't exist (startup errors)
+  const dialogOptions = {
+    type: 'error' as const,
+    title,
+    message: errorMessage,
+    detail: detailText,
+    buttons: ['OK'],
+    defaultId: 0,
+    cancelId: 0,
+    backgroundColor: '#1E2329',
+    color: '#C5D8BC',
+  };
+
+  const result = await dialog.showMessageBox(dialogOptions);
+  return result;
+};
+
 const runFirstTimeSetup = async () => {
   if (!appMetadata.getSetupComplete()) {
     createLoadingWindow();
-    const setupSuccessful = await checkAndRunFirstTimeSetup(loadingWindow);
-    if (!setupSuccessful) {
-      log.error('First-time setup failed. Exiting application.');
+    try {
+      const setupSuccessful = await checkAndRunFirstTimeSetup(loadingWindow);
+      if (!setupSuccessful) {
+        await showErrorDialog(
+          'Setup Error',
+          'First-time setup failed. The application will now exit.',
+        );
+        closeLoadingWindow();
+        app.quit();
+      }
+    } catch (error) {
+      await showErrorDialog('Setup Error', error as Error);
       closeLoadingWindow();
       app.quit();
     }
@@ -109,7 +166,13 @@ const createWindow = async () => {
   await runFirstTimeSetup();
 
   await initDependencies();
-  await McpClient.connectToSevers();
+
+  // Store config error status but don't show dialog yet
+  const hasMcpConfigErrors =
+    errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
+
+  // Handle MCP server connections (still try to connect even with config errors)
+  const mcpStatus = await McpClient.connectToSevers();
 
   const getAssetPath = (...paths: string[]): string => {
     return path.join(RESOURCES_PATH, ...paths);
@@ -129,7 +192,8 @@ const createWindow = async () => {
     },
   });
   mainWindow.loadURL(resolveHtmlPath('index.html'));
-  mainWindow.on('ready-to-show', () => {
+
+  mainWindow.on('ready-to-show', async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
@@ -141,6 +205,43 @@ const createWindow = async () => {
     } else {
       mainWindow.show();
     }
+
+    // Wait a bit for the UI to fully load before showing errors
+    setTimeout(async () => {
+      // First show config errors if any exist
+      if (hasMcpConfigErrors) {
+        await showErrorDialog(
+          'MCP Config Error',
+          'There was an error with the MCP servers configuration file.',
+        );
+      }
+
+      // Then show MCP connection errors if any exist
+      if (mcpStatus.errors.length > 0) {
+        // If all servers failed, show a critical error
+        if (!mcpStatus.success) {
+          await showErrorDialog(
+            'MCP Connection Error',
+            'Failed to connect to any MCP server. Some functionality will be unavailable.',
+          );
+        } else {
+          // If some servers succeeded but others failed, show a warning
+          const failedServers = mcpStatus.errors
+            .map((err) => err.serverName)
+            .join(', ');
+          await showErrorDialog(
+            'MCP Connection Warning',
+            `Connected to some MCP servers, but failed to connect to: ${failedServers}. Some tools may be unavailable.`,
+          );
+        }
+
+        // Also notify the renderer that it can show a detailed error report
+        mainWindow?.webContents.send('mcp-connection-status', {
+          success: mcpStatus.success,
+          hasErrors: mcpStatus.errors.length > 0,
+        });
+      }
+    }, 1000); // Delay showing dialog to ensure UI is fully loaded
   });
 
   mainWindow.on('closed', () => {
@@ -304,10 +405,21 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
     return true;
   } catch (error) {
     log.error('Error processing message:', error);
+
+    // Send error to renderer for chat display
     mainWindow?.webContents.send(
       'message-response',
       'Sorry, I encountered an error processing your message.',
     );
+
+    // Only show dialog for critical errors, not for every message error
+    if (
+      error instanceof Error &&
+      (error.message.includes('connection') || error.message.includes('fatal'))
+    ) {
+      await showErrorDialog('Message Processing Error', error);
+    }
+
     return false;
   }
 });
@@ -453,6 +565,103 @@ ipcMain.handle('list-tools', () => {
   }));
 });
 
+// Replace the existing handler
+ipcMain.handle('get-mcp-connection-errors', () => {
+  return errorManager.getErrors(ErrorCategory.MCP_CONNECTION);
+});
+
+// Add a new handler for any error category
+ipcMain.handle('get-errors', (_, category) => {
+  return errorManager.getErrors(category);
+});
+
+// Add this handler where other IPC handlers are defined
+ipcMain.handle('refresh-mcp-connections', async () => {
+  try {
+    errorManager.clearErrors(ErrorCategory.MCP_CONFIG);
+    errorManager.clearErrors(ErrorCategory.MCP_CONNECTION);
+
+    loadConfig();
+
+    // Check for config errors after loading
+    const hasMcpConfigErrors =
+      errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
+    if (hasMcpConfigErrors) {
+      await showErrorDialog(
+        'MCP Config Error',
+        'There was an error with the MCP servers configuration file.',
+      );
+    }
+
+    // Connect to servers with the updated configuration
+    const result = await McpClient.connectToSevers();
+
+    // Show connection errors if any exist
+    if (result.errors.length > 0) {
+      if (!result.success) {
+        await showErrorDialog(
+          'MCP Connection Error',
+          'Failed to connect to any MCP server. Some functionality will be unavailable.',
+        );
+      } else {
+        // If some servers succeeded but others failed, show a warning
+        const failedServers = result.errors
+          .map((err) => err.serverName)
+          .join(', ');
+        await showErrorDialog(
+          'MCP Connection Warning',
+          `Connected to some MCP servers, but failed to connect to: ${failedServers}. Some tools may be unavailable.`,
+        );
+      }
+    }
+
+    // Notify the renderer about the updated connection status
+    if (mainWindow) {
+      mainWindow.webContents.send('mcp-connection-status', {
+        success: result.success,
+        hasErrors: result.errors.length > 0,
+      });
+    }
+
+    return result;
+  } catch (error) {
+    log.error('Error refreshing MCP connections:', error);
+    await showErrorDialog(
+      'MCP Refresh Error',
+      error instanceof Error ? error.message : String(error),
+    );
+    return {
+      success: false,
+      errors: [
+        {
+          serverName: 'Configuration',
+          error:
+            error instanceof Error
+              ? { message: error.message, stack: error.stack }
+              : { message: String(error) },
+        },
+      ],
+    };
+  }
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  showErrorDialog('Unexpected Error', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  showErrorDialog('Unhandled Promise Rejection', reason as Error);
+});
+
+// Handle renderer process crashes
+app.on('render-process-gone', (_, webContents, details) => {
+  showErrorDialog(
+    'Renderer Process Crashed',
+    `Process: ${webContents.getTitle()}\nReason: ${details.reason}`,
+  );
+});
+
 /**
  * Add event listeners...
  */
@@ -468,11 +677,30 @@ app.on('window-all-closed', () => {
 app
   .whenReady()
   .then(async () => {
-    createWindow();
-    app.on('activate', () => {
-      // On macOS it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (mainWindow === null) createWindow();
+    await createWindow();
+    app.on('activate', async () => {
+      if (mainWindow === null) await createWindow();
     });
   })
-  .catch(console.log);
+  .catch(async (error) => {
+    log.error('Application failed to start:', error);
+    try {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Application Startup Error',
+        message: error instanceof Error ? error.message : String(error),
+        detail: error instanceof Error && error.stack ? error.stack : '',
+        buttons: ['OK'],
+        defaultId: 0,
+      });
+    } catch (dialogError) {
+      log.error('Failed to show startup error dialog:', dialogError);
+    } finally {
+      app.quit();
+    }
+  });
+
+ipcMain.handle('report-error', async (_, errorMessage: string) => {
+  await showErrorDialog('Application Error', errorMessage);
+  return { handled: true };
+});

@@ -6,19 +6,53 @@ type Chat = {
   created_at: Date;
 };
 
-const electronHandler = {
+const validChannels = {
+  invoke: [
+    'send-message',
+    'cancel-message',
+    'clear-chat',
+    'get-messages',
+    'get-memory-enabled',
+    'set-memory-enabled',
+    'get-recent-chats',
+    'create-new-chat',
+    'update-chat-title',
+    'delete-chat',
+    'load-chat',
+    'list-tools',
+    'open-mcp-servers-file',
+    'get-available-models',
+    'get-config',
+    'update-core-models',
+    'report-error',
+    'refresh-mcp-connections',
+  ],
+  on: [
+    'message-response',
+    'message-cancelled',
+    'setup-start',
+    'setup-complete',
+    'setup-progress',
+    'show-error-dialog',
+  ],
+};
+
+contextBridge.exposeInMainWorld('api', {
+  // Chat functionality
   sendMessage: (id: string, message: string) =>
     ipcRenderer.invoke('send-message', id, message),
   cancelMessage: () => ipcRenderer.invoke('cancel-message'),
+  clearChat: () => ipcRenderer.invoke('clear-chat'),
+  getMessagesForChat: (chatId: string) =>
+    ipcRenderer.invoke('get-messages', chatId),
+
+  // Message events
   onMessage: (callback: (message: string) => void) => {
     ipcRenderer.on('message-response', (_, message) => callback(message));
   },
-  clearChat: () => ipcRenderer.invoke('clear-chat'),
   onMessageCancelled: (callback: (message: string) => void) => {
     ipcRenderer.on('message-cancelled', (_, message) => callback(message));
   },
-  getMessagesForChat: (chatId: string) =>
-    ipcRenderer.invoke('get-messages', chatId),
 
   // Memory settings
   getMemoryEnabled: () => ipcRenderer.invoke('get-memory-enabled'),
@@ -50,28 +84,50 @@ const electronHandler = {
     ipcRenderer.removeAllListeners('setup-complete');
     ipcRenderer.removeAllListeners('setup-progress');
   },
+
+  // Error dialog events
+  onErrorDialog: (callback: (data: any) => void) => {
+    ipcRenderer.on('show-error-dialog', (_, data) => callback(data));
+  },
+  removeErrorDialogListener: () => {
+    ipcRenderer.removeAllListeners('show-error-dialog');
+  },
+
+  // Tools
   listTools: () => ipcRenderer.invoke('list-tools'),
   openMcpServersFile: () => ipcRenderer.invoke('open-mcp-servers-file'),
-};
-
-contextBridge.exposeInMainWorld('api', electronHandler);
+});
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {
+    // Invoke method with channel validation
     invoke: (channel: string, ...args: any[]) => {
-      const validChannels = [
-        'get-available-models',
-        'get-config',
-        'update-core-models',
-        'delete-chat',
-        // ...other valid channels
-      ];
-
-      if (validChannels.includes(channel)) {
+      if (validChannels.invoke.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);
       }
-
       throw new Error(`Unauthorized IPC channel: ${channel}`);
     },
+
+    on: (channel: string, callback: (...args: any[]) => void) => {
+      if (validChannels.on.includes(channel)) {
+        ipcRenderer.on(channel, (_event, ...args) => callback(...args));
+      }
+    },
+
+    // Remove listeners with channel validation
+    removeAllListeners: (channel: string) => {
+      if (validChannels.on.includes(channel)) {
+        ipcRenderer.removeAllListeners(channel);
+      }
+    },
+  },
+
+  // Error handling convenience methods
+  errorHandling: {
+    reportError: (error: Error | string) =>
+      ipcRenderer.invoke(
+        'report-error',
+        error instanceof Error ? error.toString() : error,
+      ),
   },
 });

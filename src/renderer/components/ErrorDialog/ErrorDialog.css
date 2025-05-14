@@ -1,0 +1,135 @@
+.ErrorModal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 600px;
+  width: 80%;
+  max-height: 80vh;
+  border-radius: 10px;
+  opacity: 1;
+  transition: opacity 300ms ease-in-out;
+  background-color: #1E2329;
+  border: 1px solid #E53935;
+  overflow: hidden;
+  padding: 0;
+  box-shadow: 0 8px 8px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  color: #C5D8BC;
+  z-index: 1000;
+}
+
+.ErrorOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  transition: opacity 300ms;
+  background-color: rgba(0, 0, 0, 0);
+  z-index: 999;
+}
+
+.ErrorOverlay.ReactModal__Overlay--after-open {
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 1;
+}
+
+.ErrorOverlay.ReactModal__Overlay--before-close {
+  opacity: 0;
+}
+
+.error-modal-header {
+  position: sticky;
+  top: 0;
+  background-color: #2A2F35;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(229, 57, 53, 0.3);
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.error-modal-header h2 {
+  color: #E53935;
+  margin: 0;
+}
+
+.error-modal-content {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: 50vh;
+}
+
+.error-message {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.error-detail {
+  background-color: rgba(30, 35, 41, 0.9);
+  border: 1px solid rgba(229, 57, 53, 0.2);
+  border-radius: 5px;
+  padding: 0.75rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.error-detail pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.button-container {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  position: sticky;
+  bottom: 0;
+  background-color: #2A2F35;
+  border-top: 1px solid rgba(229, 57, 53, 0.3);
+}
+
+.ok-button {
+  background: #E53935;
+  color: white;
+  border: none;
+  padding: 0.5rem 2rem;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ok-button:hover {
+  background: #F44336;
+  transform: translateY(-2px);
+}
+
+.close-button {
+  background-color: rgba(42, 47, 53, 0.8);
+  color: #E53935;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(229, 57, 53, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background-color: rgba(58, 63, 69, 0.8);
+  transform: scale(1.05);
+  border-color: rgba(229, 57, 53, 0.5);
+}
