@@ -15,14 +15,15 @@ body {
 
 .loading-container {
   text-align: center;
+  padding: 3rem;
 }
 
 .loading-spinner {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 20px auto;
-  border: 5px solid rgba(255, 255, 255, 0.2);
-  border-top: 5px solid #3498db;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 30px auto;
+  border: 6px solid rgba(255, 255, 255, 0.2);
+  border-top: 6px solid #3498db;
   border-radius: 50%;
   animation: spin 1.5s linear infinite;
 }
@@ -33,11 +34,12 @@ body {
 }
 
 h2 {
-  margin: 10px 0;
-  font-size: 24px;
+  margin: 15px 0;
+  font-size: 32px;
 }
 
 p {
-  margin: 10px 0;
+  margin: 15px 0;
   color: #bbbbbb;
+  font-size: 18px;
 }
