@@ -33,6 +33,14 @@ Small language models are closing the gap with their larger counterparts, and ou
 
 Cobolt enables you to get answers based on your data, with a model of your choosing.
 
+<div align="center">
+  <img src="assets/screenshots/screenshot_home.png" width="400" alt="Cobolt Home Screen" style="margin: 10px">
+  <img src="assets/screenshots/screenshot_chat.png" width="400" alt="Cobolt Chat Interface" style="margin: 10px">
+  <br>
+  <img src="assets/screenshots/screenshot_menu.png" width="400" alt="Cobolt Menu" style="margin: 10px">
+  <img src="assets/screenshots/screenshot_integrations.png" width="400" alt="Cobolt Integrations" style="margin: 10px">
+</div>
+
 ## Key Differentiators
 
 - Local Models: Ensures that your data does not leave your device. We are powered by Ollama, which enables you to use the open source model of your choosing.  
