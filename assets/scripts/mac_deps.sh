@@ -7,8 +7,6 @@ echo ""
 # Check if Homebrew is installed
 echo "[1/3] Checking for Homebrew..."
     # Add Homebrew to PATH for this session
-    echo "uname -m: $(uname -m)"
-    # More reliable way to detect Apple Silicon
     if [[ -d "/opt/homebrew" ]] || [[ $(sysctl -n machdep.cpu.brand_string) == *"Apple"* ]]; then
         echo "Installing Homebrew for Apple Silicon..."
         prefix="/opt/homebrew"

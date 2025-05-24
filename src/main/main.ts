@@ -68,8 +68,8 @@ const createLoadingWindow = () => {
   };
 
   loadingWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
+    width: 600,
+    height: 400,
     show: false,
     frame: false,
     resizable: false,
