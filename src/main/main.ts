@@ -36,6 +36,7 @@ import {
   ErrorCategory,
 } from '../cobolt-backend/utils/error_manager';
 import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
+import { stopOllama } from '../cobolt-backend/ollama_client';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -670,8 +671,13 @@ app.on('window-all-closed', () => {
   // Respect the OSX convention of having the application in memory even
   // after all windows have been closed
   if (process.platform !== 'darwin') {
+    stopOllama();
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  stopOllama();
 });
 
 app

@@ -55,7 +55,7 @@ async function initOllama(): Promise<boolean> {
         'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
       );
     } else if (system === 'darwin' || system === 'linux') {
-      exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 ollama serve &');
+      exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &');
     } else {
       log.log(`Unsupported operating system: ${system}`);
       return false;
@@ -67,6 +67,15 @@ async function initOllama(): Promise<boolean> {
 
   await updateModels();
   return true;
+}
+
+async function stopOllama() {
+  const system: string = os.platform().toLowerCase();
+  if (system === 'win32') {
+    exec('taskkill /IM ollama.exe /F');
+  } else if (system === 'darwin' || system === 'linux') {
+    exec('brew services stop ollama');
+  }
 }
 
 /**
@@ -206,4 +215,4 @@ if (require.main === module) {
   })();
 }
 
-export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream };
+export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama };

@@ -71,6 +71,7 @@ function runSetupScript(
     // Capture and log stderr
     child.stderr?.on('data', (data) => {
       log.error(`[Setup] ${data.toString().trim()}`);
+      appMetadata.resetSetupComplete();
     });
   });
 }
