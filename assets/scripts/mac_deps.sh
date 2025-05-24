@@ -5,24 +5,46 @@ echo "          Installing Cobolt dependencies"
 echo "======================================================"
 echo ""
 
+# Check if Xcode Command Line Tools are installed
+if ! xcode-select -p &> /dev/null; then
+    echo "Installing Xcode Command Line Tools..."
+    # Touch a temporary file to trigger the Xcode CLT installation prompt
+    touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    
+    # Get the latest Xcode CLT package name
+    PROD=$(softwareupdate -l | grep "\*.*Command Line" | head -n 1 | awk -F"*" '{print $2}' | sed -e 's/^ *//' | tr -d '\n')
+    
+    # Install Xcode CLT silently
+    softwareupdate -i "$PROD" --verbose
+    
+    # Clean up
+    rm /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    
+    echo "Xcode Command Line Tools installed successfully."
+else
+    echo "Xcode Command Line Tools already installed."
+fi
+
 # Check if Homebrew is installed
 echo "[1/3] Checking for Homebrew..."
-if ! command -v brew &> /dev/null; then
-    echo "Homebrew not found. Installing Homebrew..."
-    cd var/tmp
-    mkdir homebrewtemp && curl -L https://github.com/Homebrew/brew/tarball/master | tar xz --strip 1 -C homebrewtemp
-    pwd
-    ls homebrewtemp
-
-    eval "$(homebrewtemp/bin/brew shellenv)"
     # Add Homebrew to PATH for this session
-    # if [[ $(uname -m) == 'arm64' ]]; then
-    #     eval "$(homebrew/bin/brew shellenv)"
-    # else
-    #     eval "$(/usr/local/bin/brew shellenv)"
-    # fi
+    echo "uname -m: $(uname -m)"
+    # More reliable way to detect Apple Silicon
+    if [[ -d "/opt/homebrew" ]] || [[ $(sysctl -n machdep.cpu.brand_string) == *"Apple"* ]]; then
+        echo "Installing Homebrew for Apple Silicon..."
+        prefix="/opt/homebrew"
+    else
+        echo "Installing Homebrew for Intel..."
+        prefix="/usr/local"
+    fi
+    eval "$(${prefix}/bin/brew shellenv)"
+
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew not found."
+    echo "Error: Homebrew is required but not installed. Please install Homebrew first." >&2
+    exit 1
 else
-    echo "Homebrew is already installed."
+    echo "Homebrew installed at $(which brew)"
 fi
 
 # Check Python version
@@ -62,6 +84,3 @@ for dep in $DEPENDENCIES; do
         echo "$dep is already installed."
     fi
 done
-
-echo "Deleting homebrewtemp directory..."
-rm -rf homebrewtemp

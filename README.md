@@ -39,6 +39,11 @@ Cobolt enables you to get answers based on your data, with a model of your choos
 - Model Context Protocol Integration: Enables you to connect to the data sources, or tools that matter the most to you using MCP. This enables your model to access relevant tools and data, providing more useful, context aware responses.
 - Native Memory Support: Cobolt remembers the most important things about you, and uses this to give you more relevant responses.
 
+## Getting Started
+Download links
+If you are on macOS, ensure that brew package manager is installed with below script
+`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+
 ## How to?
 
 ### How to change the model?
