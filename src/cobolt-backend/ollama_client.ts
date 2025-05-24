@@ -20,6 +20,7 @@ const OLLAMA_START_TIMEOUT = configStore.getOllamaStartTimeout();
 const defaultTemperature = 1.0;
 const defaultTopK = 64;
 const defaultTopP = 0.95;
+let ollamaServerStartedByApp = false;
 
 /**
  * If the required models are not available, download them
@@ -48,6 +49,7 @@ async function initOllama(): Promise<boolean> {
     await ollama.ps();
   } catch {
     log.log('Error connecting to Ollama: Starting the ollama server');
+    ollamaServerStartedByApp = true;
     log.debug('Platform:', platform);
     const system: string = platform.toLowerCase();
     if (system === 'win32') {
@@ -70,6 +72,11 @@ async function initOllama(): Promise<boolean> {
 }
 
 async function stopOllama() {
+  if (!ollamaServerStartedByApp) {
+    log.log('Ollama server was not started by the app, skipping stop');
+    return;
+  }
+  
   const system: string = os.platform().toLowerCase();
   if (system === 'win32') {
     exec('taskkill /IM ollama.exe /F');
