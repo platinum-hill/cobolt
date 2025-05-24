@@ -36,6 +36,7 @@ import {
   ErrorCategory,
 } from '../cobolt-backend/utils/error_manager';
 import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
+import { stopOllama } from '../cobolt-backend/ollama_client';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -67,8 +68,8 @@ const createLoadingWindow = () => {
   };
 
   loadingWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
+    width: 600,
+    height: 400,
     show: false,
     frame: false,
     resizable: false,
@@ -672,6 +673,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  stopOllama();
 });
 
 app

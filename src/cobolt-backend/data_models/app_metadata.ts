@@ -29,6 +29,10 @@ const appMetadata = {
     store.set('setupComplete', true);
   },
 
+  resetSetupComplete: () => {
+    store.set('setupComplete', false);
+  },
+
   getMemoryEnabled: (): boolean => {
     return store.get('memoryEnabled');
   },

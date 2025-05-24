@@ -45,16 +45,33 @@ function runSetupScript(
   platform: ReturnType<typeof getPlatformInfo>,
 ): Promise<boolean> {
   return new Promise((resolve, reject) => {
-    execFile(platform.execCommand, [], { shell: true }, (error) => {
-      if (error) {
-        log.error(`Error running ${platform.name} setup script:`, error);
-        reject(error);
-      } else {
-        log.info(`${platform.name} setup script completed successfully`);
-        appMetadata.setSetupComplete();
-        notifyRenderer(mainWindow, 'setup-complete', 'Setup complete');
-        resolve(true);
-      }
+    const child = execFile(
+      platform.execCommand,
+      [],
+      { shell: true },
+      (error) => {
+        if (error) {
+          log.error(`Error running ${platform.name} setup script:`, error);
+          reject(error);
+        } else {
+          log.info(`${platform.name} setup script completed successfully`);
+          appMetadata.setSetupComplete();
+          notifyRenderer(mainWindow, 'setup-complete', 'Setup complete');
+          resolve(true);
+        }
+      },
+    );
+
+    // Capture and log stdout
+    child.stdout?.on('data', (data) => {
+      log.info(`[Setup] ${data.toString().trim()}`);
+      notifyRenderer(mainWindow, 'setup-progress', data.toString().trim());
+    });
+
+    // Capture and log stderr
+    child.stderr?.on('data', (data) => {
+      log.error(`[Setup] ${data.toString().trim()}`);
+      appMetadata.resetSetupComplete();
     });
   });
 }
@@ -93,8 +110,7 @@ async function checkAndRunFirstTimeSetup(
     await dialog.showMessageBox({
       type: 'error',
       title: 'Setup Error',
-      message:
-        'An error occurred during setup. Please check the logs for more details.',
+      message: `An error occurred during setup: ${error}`,
       buttons: ['OK'],
       defaultId: 0,
     });

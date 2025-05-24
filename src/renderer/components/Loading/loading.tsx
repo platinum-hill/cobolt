@@ -9,10 +9,10 @@ function Loading() {
       <div className="loading-spinner" />
       <h2>Setting up Cobolt</h2>
       <p>
-        Please wait while we install required dependencies if needed (Ollama,
-        Python, etc.)
+        Please wait while we download and install dependencies if needed
+        including Ollama, Python, and the local models.
       </p>
-      <p>This usually takes a few mins. We appreciate your patience.</p>
+      <p>This usually takes 20-25 minutes. We appreciate your patience.</p>
     </div>
   );
 }
