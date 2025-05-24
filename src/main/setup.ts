@@ -109,8 +109,7 @@ async function checkAndRunFirstTimeSetup(
     await dialog.showMessageBox({
       type: 'error',
       title: 'Setup Error',
-      message:
-        'An error occurred during setup. Please check the logs for more details.',
+      message: `An error occurred during setup: ${error}`,
       buttons: ['OK'],
       defaultId: 0,
     });

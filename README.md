@@ -40,8 +40,7 @@ Cobolt enables you to get answers based on your data, with a model of your choos
 - Native Memory Support: Cobolt remembers the most important things about you, and uses this to give you more relevant responses.
 
 ## Getting Started
-Download links
-If you are on macOS, ensure that brew package manager is installed with below script
+We use homebrew to install dependencies. If you are on macOS, ensure that homebrew package manager is installed with below script
 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 
 ## How to?
