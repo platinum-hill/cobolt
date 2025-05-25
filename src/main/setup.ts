@@ -8,6 +8,7 @@ import appMetadata from '../cobolt-backend/data_models/app_metadata';
 function getPlatformInfo() {
   const isWindows = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
+  const isLinux = process.platform === 'linux';
   const resourcesPath = app.isPackaged
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
@@ -21,9 +22,18 @@ function getPlatformInfo() {
     execCommand = `"${scriptPath}"`;
   }
 
+  const supported = isWindows || isMac || isLinux;
+
+  let name = 'Linux';
+  if (isWindows) {
+    name = 'Windows';
+  } else if (isMac) {
+    name = 'macOS';
+  }
+
   return {
-    supported: isWindows || isMac,
-    name: isWindows ? 'Windows' : 'macOS',
+    supported,
+    name,
     scriptPath,
     execCommand,
   };

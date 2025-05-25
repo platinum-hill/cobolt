@@ -9,4 +9,5 @@ install-deps:
 		pwsh -Command "& .\assets\scripts\win_deps.ps1"; \
 	else \
 		echo "Detected Unix/Linux. Skipping install..."; \
+		bash -ex assets/scripts/mac_deps.sh; \
 	fi
