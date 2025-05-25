@@ -1,3 +1,13 @@
+/**
+ * Rewrites a user search query to be clearer and more specific, generating 2-3 alternative phrasings.
+ * Intended to improve search engine performance while maintaining the original intent.
+ *
+ * @param question - The original user search query.
+ * @returns A prompt string for an LLM to generate alternative queries.
+ *
+ * @example
+ * const prompt = createQueryPrompt('How do I fix a TypeError in JavaScript?');
+ */
 function createQueryPrompt(question: string): string {
   return `Rewrite the following search query to be more clear and specific, focusing on the user's likely intent.
 Maintain the core meaning but improve search engine performance. Generate 2-3 alternative phrasings of this question and nothing else. You do not need to explain yourself.
@@ -8,6 +18,21 @@ Rewritten Query: `;
 }
 
 
+/**
+ * Generates a planning prompt for an LLM to select and parameterize tool calls for a user task.
+ *
+ * @param currentDateTime - The current date and time as an ISO string.
+ * @param question - The user's task or question.
+ * @param toolsDocstring - Documentation string describing available tools and their parameters.
+ * @returns A prompt string instructing the LLM to return a JSON object with tool calls.
+ *
+ * @example
+ * const prompt = createPlanPrompt(
+ *   '2025-05-25T12:00:00Z',
+ *   'Get my emails from last week',
+ *   'get_emails(date_from, date_to), get_calendar_events(event_start, event_end)'
+ * );
+ */
 function createPlanPrompt(
   currentDateTime: string,
   question: string,
@@ -54,6 +79,15 @@ Current Date & Time: ${currentDateTime}
 A: `;
 }
 
+/**
+ * Creates a prompt for a helpful AI assistant to answer user questions in a chat context.
+ *
+ * @param currentDateTime - The current date and time as an ISO string.
+ * @returns A prompt string for the LLM to answer as a helpful assistant.
+ *
+ * @example
+ * const prompt = createChatPrompt('2025-05-25T12:00:00Z');
+ */
 function createChatPrompt(
   currentDateTime: string,
 ): string {
@@ -68,6 +102,18 @@ Current Date & Time: ${currentDateTime}.
 `;
 }
 
+/**
+ * Creates a prompt for a Retrieval-Augmented Generation (RAG) scenario, using context and optional user memories.
+ *
+ * @param currentDateTime - The current date and time as an ISO string.
+ * @param question - The user's question.
+ * @param context - The retrieved context to answer the question.
+ * @param memories - Optional user memories to supplement the answer.
+ * @returns A prompt string for the LLM to answer using context and memories.
+ *
+ * @example
+ * const prompt = createRagPrompt('2025-05-25T12:00:00Z', 'What is my next meeting?', 'You have a meeting at 3pm.', '');
+ */
 function createRagPrompt(
   currentDateTime: string,
   question: string,
@@ -91,6 +137,15 @@ user: ${question}
 A: `;
 }
 
+/**
+ * Creates a prompt instructing the LLM to determine which tools to use for a query, considering user memories.
+ *
+ * @param currentDateTime - The current date and time as an ISO string.
+ * @returns A prompt string for the LLM to select tools.
+ *
+ * @example
+ * const prompt = createQueryWithToolsPrompt('2025-05-25T12:00:00Z');
+ */
 function createQueryWithToolsPrompt( 
   currentDateTime: string): string {
   return `
@@ -99,11 +154,33 @@ function createQueryWithToolsPrompt(
     `
 }
 
+/**
+ * Creates a prompt to provide the LLM with a tool's response for further processing.
+ *
+ * @param toolName - The name of the tool that was called.
+ * @param toolResponse - The response returned by the tool.
+ * @returns A prompt string for the LLM to use the tool's response.
+ *
+ * @example
+ * const prompt = createQueryWithToolResponsePrompt('get_emails', '{"emails": []}');
+ */
 function createQueryWithToolResponsePrompt(toolName: string, toolResponse: string): string {
   return `
     The following is a response from a tool ${toolName}. response: ${toolResponse}.`
 }
 
+/**
+ * Creates a prompt for the LLM to answer a query when tool calls have failed, optionally using user memories.
+ *
+ * @param currentDateTime - The current date and time as an ISO string.
+ * @param query - The original user query.
+ * @param toolNames - Array of tool names that failed.
+ * @param memories - Optional user memories to help answer the query.
+ * @returns A prompt string for the LLM to answer without tool usage.
+ *
+ * @example
+ * const prompt = createQueryToolFailure('2025-05-25T12:00:00Z', 'Show my calendar', ['get_calendar_events'], '');
+ */
 function createQueryToolFailure(
   currentDateTime: string,
   query: string,
