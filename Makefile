@@ -6,7 +6,7 @@ install-deps:
 		bash -ex assets/scripts/mac_deps.sh; \
 	elif [ "$(OS)" = "Windows_NT" ]; then \
 		echo "Detected Windows. Installing using winget..."; \
-		cmd /c .\assets\scripts\win_deps.bat; \
+		pwsh -Command "& .\assets\scripts\win_deps.ps1"; \
 	else \
 		echo "Detected Unix/Linux. Skipping install..."; \
 	fi
