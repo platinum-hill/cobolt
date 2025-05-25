@@ -5,7 +5,7 @@
   
   [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
   [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey.svg)](#)
-  [![Version](https://img.shields.io/badge/Version-0.0.3-green.svg)](#)
+  [![Version](https://img.shields.io/badge/Version-0.0.4-green.svg)](#)
   [![Downloads](https://img.shields.io/github/downloads/platinum-hill/cobolt/total.svg)](https://github.com/platinum-hill/cobolt/releases)
   [![Build Status](https://github.com/platinum-hill/cobolt/actions/workflows/test.yml/badge.svg)](https://github.com/platinum-hill/cobolt/actions/workflows/build.yml)
   [![Release Status](https://github.com/platinum-hill/cobolt/actions/workflows/publish.yml/badge.svg)](https://github.com/platinum-hill/cobolt/actions/workflows/release.yml)
@@ -14,8 +14,8 @@
 <div align="center">
   <h3>📥 Download Latest Release</h3>
   
-  [![macOS Download](https://img.shields.io/badge/macOS-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.3/Cobolt-0.0.3.dmg)
-  [![Windows Download](https://img.shields.io/badge/Windows-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.3/Cobolt-Setup-0.0.3.exe)
+  [![macOS Download](https://img.shields.io/badge/macOS-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.4/Cobolt-0.0.3.dmg)
+  [![Windows Download](https://img.shields.io/badge/Windows-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.4/Cobolt-Setup-0.0.3.exe)
   
   <sub>This is an early release which is expected to be unstable and change significantly over time.
   For other platforms and previous versions, visit our [Releases](https://github.com/platinum-hill/cobolt/releases) page</sub>
@@ -54,7 +54,7 @@ We use homebrew to install dependencies. If you are on macOS, ensure that homebr
 ## How to?
 
 ### How to change the model?
-By default we use [llama3.1:8b](https://ollama.com/library/llama3.1:8b) for inference, and [nomic-embed-text](nomic-embed-text) for embedding.
+By default we use [llama3.1:8b](https://ollama.com/library/llama3.1:8b) for inference, and [nomic-embed-text](https://ollama.com/library/nomic-embed-text) for embedding.
 
 You can use any Ollama model that supports tool calls listed [here](https://ollama.com/search?c=tools). 
 To download a new model for inference install it from Ollama
