@@ -20,6 +20,19 @@
   z-index: 1000;
 }
 
+.ErrorModal.model-download {
+  border-color: #4caf50;
+}
+
+.ErrorModal.model-download .error-modal-header {
+  border-bottom-color: rgba(76, 175, 80, 0.3);
+}
+
+.ErrorModal.model-download .error-detail {
+  background-color: rgba(42, 47, 53, 0.9);
+  border-color: rgba(76, 175, 80, 0.2);
+}
+
 .ErrorOverlay {
   position: fixed;
   top: 0;

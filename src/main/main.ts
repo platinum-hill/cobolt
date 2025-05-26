@@ -36,7 +36,7 @@ import {
   ErrorCategory,
 } from '../cobolt-backend/utils/error_manager';
 import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
-import { stopOllama } from '../cobolt-backend/ollama_client';
+import { stopOllama, setProgressWindow } from '../cobolt-backend/ollama_client';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -166,15 +166,6 @@ const createWindow = async () => {
   // Run first-time setup while loading window is shown
   await runFirstTimeSetup();
 
-  await initDependencies();
-
-  // Store config error status but don't show dialog yet
-  const hasMcpConfigErrors =
-    errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
-
-  // Handle MCP server connections (still try to connect even with config errors)
-  const mcpStatus = await McpClient.connectToSevers();
-
   const getAssetPath = (...paths: string[]): string => {
     return path.join(RESOURCES_PATH, ...paths);
   };
@@ -192,20 +183,36 @@ const createWindow = async () => {
         : path.join(__dirname, '../dll/preload.js'),
     },
   });
+
+  // Set progress window for ollama client
+  setProgressWindow(mainWindow);
+
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   mainWindow.on('ready-to-show', async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
+
     // Close loading window once main window is ready
     closeLoadingWindow();
 
+    // Show main window
     if (process.env.START_MINIMIZED) {
       mainWindow.minimize();
     } else {
       mainWindow.show();
     }
+
+    // Initialize dependencies (this will trigger model downloads if needed)
+    await initDependencies();
+
+    // Store config error status but don't show dialog yet
+    const hasMcpConfigErrors =
+      errorManager.getErrors(ErrorCategory.MCP_CONFIG).length > 0;
+
+    // Handle MCP server connections (still try to connect even with config errors)
+    const mcpStatus = await McpClient.connectToSevers();
 
     // Wait a bit for the UI to fully load before showing errors
     setTimeout(async () => {

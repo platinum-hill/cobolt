@@ -7,11 +7,13 @@ function ErrorDialog() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [detail, setDetail] = useState<string | undefined>('');
+  const [isModelDownload, setIsModelDownload] = useState(false);
 
   useEffect(() => {
     const handleErrorDialog = (data: any) => {
       setTitle(data.title);
       setMessage(data.message);
+      setIsModelDownload(data.isModelDownload || false);
 
       // Format detailed error information based on error type
       let formattedDetail = data.detail || '';
@@ -40,23 +42,52 @@ function ErrorDialog() {
   }, []);
 
   const handleClose = () => {
+    // Don't allow closing during model downloads unless it's a completion message
+    if (
+      isModelDownload &&
+      !title.includes('Models Ready') &&
+      !title.includes('Error')
+    ) {
+      return;
+    }
     setIsOpen(false);
   };
+
+  // Auto-close success messages after a delay
+  useEffect(() => {
+    if (isOpen && title.includes('Models Ready')) {
+      const timer = setTimeout(() => {
+        setIsOpen(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [isOpen, title]);
 
   return (
     <ReactModal
       isOpen={isOpen}
-      className="ErrorModal"
+      className={`ErrorModal ${isModelDownload ? 'model-download' : ''}`}
       overlayClassName="ErrorOverlay"
       closeTimeoutMS={300}
       ariaHideApp={false}
       onRequestClose={handleClose}
+      shouldCloseOnEsc={!isModelDownload || title.includes('Models Ready')}
+      shouldCloseOnOverlayClick={
+        !isModelDownload || title.includes('Models Ready')
+      }
     >
       <div className="error-modal-header">
-        <h2>{title}</h2>
-        <button className="close-button" type="button" onClick={handleClose}>
-          X
-        </button>
+        <h2 style={{ color: isModelDownload ? '#4caf50' : '#E53935' }}>
+          {title}
+        </h2>
+        {(!isModelDownload ||
+          title.includes('Models Ready') ||
+          title.includes('Error')) && (
+          <button className="close-button" type="button" onClick={handleClose}>
+            X
+          </button>
+        )}
       </div>
       <div className="error-modal-content">
         <p className="error-message">{message}</p>
@@ -67,9 +98,20 @@ function ErrorDialog() {
         )}
       </div>
       <div className="button-container">
-        <button type="button" className="ok-button" onClick={handleClose}>
-          OK
-        </button>
+        {(!isModelDownload ||
+          title.includes('Models Ready') ||
+          title.includes('Error')) && (
+          <button type="button" className="ok-button" onClick={handleClose}>
+            OK
+          </button>
+        )}
+        {isModelDownload &&
+          !title.includes('Models Ready') &&
+          !title.includes('Error') && (
+            <div style={{ color: '#8a9ba8', fontStyle: 'italic' }}>
+              Please wait...
+            </div>
+          )}
       </div>
     </ReactModal>
   );
