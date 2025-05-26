@@ -291,10 +291,12 @@ async function initOllama(): Promise<boolean> {
     log.debug('Platform:', platform);
     const system: string = platform.toLowerCase();
     if (system === 'win32') {
+      log.log('Starting ollama server');
       exec(
         'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
       );
     } else if (system === 'darwin' || system === 'linux') {
+      log.log('Starting ollama server');
       exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &');
     } else {
       log.log(`Unsupported operating system: ${system}`);

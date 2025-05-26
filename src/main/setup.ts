@@ -6,6 +6,7 @@ import appMetadata from '../cobolt-backend/data_models/app_metadata';
 
 // Get platform specific information required for initial setup
 function getPlatformInfo() {
+  log.info(`Platform: ${process.platform}`);
   const isWindows = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
   const isLinux = process.platform === 'linux';
@@ -91,6 +92,7 @@ async function checkAndRunFirstTimeSetup(
   mainWindow: BrowserWindow | null,
 ): Promise<boolean> {
   const platform = getPlatformInfo();
+  log.debug(`Platform ${platform.name}. Supported: ${platform.supported}`);
   if (!platform.supported) {
     log.info('Skipping setup for unsupported platform');
     appMetadata.setSetupComplete();
