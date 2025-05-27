@@ -101,7 +101,11 @@ function ErrorDialog() {
         {(!isModelDownload ||
           title.includes('Models Ready') ||
           title.includes('Error')) && (
-          <button type="button" className="ok-button" onClick={handleClose}>
+          <button
+            type="button"
+            className={`ok-button ${isModelDownload && title.includes('Models Ready') ? 'success' : ''}`}
+            onClick={handleClose}
+          >
             OK
           </button>
         )}

@@ -156,21 +156,122 @@ async function pullRequiredModel(
       
     } catch (error) {
       log.error(`Error downloading ${model}:`, error);
+      
       let errorMsg = '';
+      let userFriendlyMsg = '';
+      
       if (error && typeof error === 'object' && 'message' in error) {
         errorMsg = (error as { message: string }).message;
       } else {
         errorMsg = String(error);
       }
-      progressDetails.push(`✗ Failed to download ${model}: ${errorMsg}`);
+      
+      userFriendlyMsg = `Failed to download "${model}": ${errorMsg}`;
+      progressDetails.push(`✗ ${userFriendlyMsg}`);
       
       sendModelDownloadStatus(
         'Model Download Error', 
-        `Failed to download ${model}`, 
+        userFriendlyMsg, 
         progressDetails.join('\n'),
         true
       );
-      throw error;
+      
+      throw new Error(`Failed to download model "${model}": ${userFriendlyMsg}`);
+    }
+  }
+}
+
+/**
+ * Check if the required models are available and download them if they are not
+ */
+async function updateModels() {
+  try {
+    const modelsList = await ollama.list();
+    const existingModelNames: string[] = modelsList.models.map((m) => m.model);
+
+    const config = configStore.getFullConfig();
+    const modelsToCheck = Object.values(config.models);
+    
+    const missingModels = modelsToCheck.filter(model => 
+      !existingModelNames.includes(model.name)
+    );
+
+    if (missingModels.length === 0) {
+      return;
+    }
+
+    // Send immediate update for start
+    const allProgress = [`Found ${missingModels.length} missing model(s): ${missingModels.map(m => m.name).join(', ')}`];
+    sendModelDownloadStatus(
+      'Downloading Models', 
+      'Please wait while required models are being downloaded...', 
+      allProgress.join('\n'),
+      true
+    );
+
+    // Track successful and failed downloads
+    const results = [];
+    
+    // Download models sequentially
+    for (const model of modelsToCheck) {
+      try {
+        await pullRequiredModel(model.name, existingModelNames);
+        results.push({ model: model.name, success: true });
+      } catch (error) {
+        results.push({ model: model.name, success: false, error });
+        log.error(`Failed to download model ${model.name}:`, error);
+      }
+    }
+
+    // Check results and provide appropriate feedback
+    const failed = results.filter(r => !r.success);
+
+    if (failed.length === 0) {
+      // All models downloaded successfully
+      allProgress.push('All models downloaded successfully!');
+      sendModelDownloadStatus(
+        'Models Ready', 
+        'All required models have been downloaded and are ready to use.', 
+        allProgress.join('\n'),
+        true
+      );
+    } else {
+      // Any models failed to download - treat as critical error
+      const errorSummary = [
+        'Failed to download required models:',
+        ...failed.map(f => `• ${f.model}`),
+        '',
+        'The application will not work properly without these models.',
+        'Please check your configuration and fix the model names, then restart the application.'
+      ].join('\n');
+      
+      sendModelDownloadStatus(
+        'Model Download Failed', 
+        'Failed to download required models. The application will not work properly and should be fixed.', 
+        errorSummary,
+        true
+      );
+      
+      const failedModelsWithErrors = failed.map(f => {
+        const errorMsg = f.error instanceof Error ? f.error.message : String(f.error);
+        return `${f.model}: ${errorMsg}`;
+      }).join('; ');
+      
+      throw new Error(`Failed to download required models: ${failedModelsWithErrors}`);
+    }
+  } catch (error) {
+    log.error('Error in updateModels:', error);
+    
+    // Handle errors in the model checking process itself
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    
+    if (progressWindow && !progressWindow.isDestroyed()) {
+      progressWindow.webContents.send('show-error-dialog', {
+        title: 'Model Download Failed',
+        message: 'Failed to download required models. The application will not work properly.',
+        detail: `Error: ${errorMsg}\n\nPlease check your Ollama installation and configuration.`,
+        isModelDownload: false
+      });
     }
   }
 }
@@ -204,8 +305,15 @@ async function initOllama(): Promise<boolean> {
     });
   }
 
-  await updateModels();
-  return true;
+  try {
+    await updateModels();
+    return true;
+  } catch (error) {
+    log.error('Failed to initialize models:', error);
+    // Don't fail completely - let the app start even if models failed
+    // The user will see the error dialog and can try to fix the configuration
+    return false;
+  }
 }
 
 async function stopOllama() {
@@ -220,48 +328,6 @@ async function stopOllama() {
   } else if (system === 'darwin' || system === 'linux') {
     exec('brew services stop ollama');
   }
-}
-
-/**
- * Check if the required models are available and download them if they are not
- */
-async function updateModels() {
-  const modelsList = await ollama.list();
-  const existingModelNames: string[] = modelsList.models.map((m) => m.model);
-
-  const config = configStore.getFullConfig();
-  const modelsToCheck = Object.values(config.models);
-  
-  const missingModels = modelsToCheck.filter(model => 
-    !existingModelNames.includes(model.name)
-  );
-
-  if (missingModels.length === 0) {
-    return;
-  }
-
-  // Send immediate update for start
-  const allProgress = [`Found ${missingModels.length} missing model(s)`];
-  sendModelDownloadStatus(
-    'Downloading Models', 
-    'Please wait while required models are being downloaded...', 
-    allProgress.join('\n'),
-    true
-  );
-
-  // Download models sequentially
-  for (const model of modelsToCheck) {
-    await pullRequiredModel(model.name, existingModelNames);
-  }
-
-  // Send immediate update for completion
-  allProgress.push('All models downloaded successfully!');
-  sendModelDownloadStatus(
-    'Models Ready', 
-    'All required models have been downloaded and are ready to use.', 
-    allProgress.join('\n'),
-    true
-  );
 }
 
 /**

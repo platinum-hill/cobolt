@@ -120,8 +120,17 @@
   transition: all 0.2s ease;
 }
 
+.ok-button.success {
+  background: #4caf50;
+}
+
 .ok-button:hover {
   background: #F44336;
+  transform: translateY(-2px);
+}
+
+.ok-button.success:hover {
+  background: #66bb6a;
   transform: translateY(-2px);
 }
 
