@@ -20,6 +20,33 @@
   z-index: 1000;
 }
 
+.ErrorModal.model-download {
+  border-color: #4caf50;
+}
+
+.ErrorModal.model-download .error-modal-header {
+  border-bottom-color: rgba(76, 175, 80, 0.3);
+}
+
+.ErrorModal.model-download .error-detail {
+  background-color: rgba(42, 47, 53, 0.9);
+  border-color: rgba(76, 175, 80, 0.2);
+}
+
+.ErrorModal.model-download .close-button {
+  color: #4caf50;
+  border-color: rgba(76, 175, 80, 0.2);
+}
+
+.ErrorModal.model-download .close-button:hover {
+  border-color: rgba(76, 175, 80, 0.5);
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.ErrorModal.model-download .button-container {
+  border-top-color: rgba(76, 175, 80, 0.3);
+}
+
 .ErrorOverlay {
   position: fixed;
   top: 0;
@@ -107,8 +134,17 @@
   transition: all 0.2s ease;
 }
 
+.ok-button.success {
+  background: #4caf50;
+}
+
 .ok-button:hover {
   background: #F44336;
+  transform: translateY(-2px);
+}
+
+.ok-button.success:hover {
+  background: #66bb6a;
   transform: translateY(-2px);
 }
 

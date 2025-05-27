@@ -10,6 +10,64 @@ import { formatDateTime } from './datetime_parser';
 import { createQueryWithToolsPrompt } from './prompt_templates';
 import  { ChatHistory } from './chat_history';
 import { MODELS } from './model_manager'
+import { BrowserWindow } from 'electron';
+
+let progressWindow: BrowserWindow | null = null;
+let updateTimer: NodeJS.Timeout | null = null;
+let pendingUpdate: { title: string; message: string; detail: string } | null = null;
+
+/**
+ * Set the progress window for notifications
+ */
+function setProgressWindow(window: BrowserWindow | null) {
+  progressWindow = window;
+}
+
+/**
+ * Actually send the update to the renderer
+ */
+function doSendUpdate(title: string, message: string, detail: string) {
+  if (progressWindow && !progressWindow.isDestroyed()) {
+    progressWindow.webContents.send('show-error-dialog', {
+      title,
+      message,
+      detail,
+      isModelDownload: true
+    });
+  }
+}
+
+/**
+ * Send model download status to the error dialog (debounced)
+ */
+function sendModelDownloadStatus(title: string, message: string, detail: string, immediate = false) {
+  if (immediate) {
+    // Clear any pending update and send immediately
+    if (updateTimer) {
+      clearTimeout(updateTimer);
+      updateTimer = null;
+    }
+    doSendUpdate(title, message, detail);
+    return;
+  }
+
+  // Store the latest update
+  pendingUpdate = { title, message, detail };
+
+  // If there's already a timer, just update the pending data
+  if (updateTimer) {
+    return;
+  }
+
+  // Schedule the update
+  updateTimer = setTimeout(() => {
+    if (pendingUpdate) {
+      doSendUpdate(pendingUpdate.title, pendingUpdate.message, pendingUpdate.detail);
+      pendingUpdate = null;
+    }
+    updateTimer = null;
+  }, 1000);
+}
 
 const ollama = new Ollama({
   host: configStore.getOllamaUrl(),
@@ -34,7 +92,187 @@ async function pullRequiredModel(
 ): Promise<void> {
   if (!modelNames.includes(model)) {
     log.log(`${model} not found in Ollama: downloading now`);
-    await ollama.pull({ model });
+    
+    let progressDetails = [`Starting download of ${model}...`];
+    
+    // Send immediate update for start
+    sendModelDownloadStatus(
+      'Downloading Models', 
+      'Please wait while required models are being downloaded...', 
+      progressDetails.join('\n'),
+      true
+    );
+    
+    try {
+      const stream = await ollama.pull({ model, stream: true });
+      let lastPercentage = -1;
+      
+      for await (const part of stream) {
+        if (part.status) {
+          let progressMsg = `${model}: ${part.status}`;
+          
+          // Add percentage if available
+          if (part.completed && part.total) {
+            const percentage = Math.round((part.completed / part.total) * 100);
+            progressMsg = `${model}: ${part.status} (${percentage}%)`;
+            
+            // Only update if percentage changed significantly
+            if (Math.abs(percentage - lastPercentage) < 5) {
+              continue;
+            }
+            lastPercentage = percentage;
+          }
+          
+          // Replace the last progress message for the same model
+          if (progressDetails.length > 1 && progressDetails[progressDetails.length - 1].startsWith(model)) {
+            progressDetails[progressDetails.length - 1] = progressMsg;
+          } else {
+            progressDetails.push(progressMsg);
+          }
+          
+          // Keep only last 8 progress messages
+          if (progressDetails.length > 8) {
+            progressDetails = [progressDetails[0], ...progressDetails.slice(-7)];
+          }
+          
+          // Debounced update
+          sendModelDownloadStatus(
+            'Downloading Models', 
+            'Please wait while required models are being downloaded...', 
+            progressDetails.join('\n')
+          );
+        }
+      }
+      
+      progressDetails.push(`✓ ${model} downloaded successfully`);
+      
+      // Send immediate update for completion
+      sendModelDownloadStatus(
+        'Downloading Models', 
+        'Please wait while required models are being downloaded...', 
+        progressDetails.join('\n'),
+        true
+      );
+      
+    } catch (error) {
+      log.error(`Error downloading ${model}:`, error);
+      
+      let errorMsg = '';
+      let userFriendlyMsg = '';
+      
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMsg = (error as { message: string }).message;
+      } else {
+        errorMsg = String(error);
+      }
+      
+      userFriendlyMsg = `Failed to download "${model}": ${errorMsg}`;
+      progressDetails.push(`✗ ${userFriendlyMsg}`);
+      
+      sendModelDownloadStatus(
+        'Model Download Error', 
+        userFriendlyMsg, 
+        progressDetails.join('\n'),
+        true
+      );
+      
+      throw new Error(`Failed to download model "${model}": ${userFriendlyMsg}`);
+    }
+  }
+}
+
+/**
+ * Check if the required models are available and download them if they are not
+ */
+async function updateModels() {
+  try {
+    const modelsList = await ollama.list();
+    const existingModelNames: string[] = modelsList.models.map((m) => m.model);
+
+    const config = configStore.getFullConfig();
+    const modelsToCheck = Object.values(config.models);
+    
+    const missingModels = modelsToCheck.filter(model => 
+      !existingModelNames.includes(model.name)
+    );
+
+    if (missingModels.length === 0) {
+      return;
+    }
+
+    // Send immediate update for start
+    const allProgress = [`Found ${missingModels.length} missing model(s): ${missingModels.map(m => m.name).join(', ')}`];
+    sendModelDownloadStatus(
+      'Downloading Models', 
+      'Please wait while required models are being downloaded...', 
+      allProgress.join('\n'),
+      true
+    );
+
+    // Track successful and failed downloads
+    const results = [];
+    
+    // Download models sequentially
+    for (const model of modelsToCheck) {
+      try {
+        await pullRequiredModel(model.name, existingModelNames);
+        results.push({ model: model.name, success: true });
+      } catch (error) {
+        results.push({ model: model.name, success: false, error });
+        log.error(`Failed to download model ${model.name}:`, error);
+      }
+    }
+
+    // Check results and provide appropriate feedback
+    const failed = results.filter(r => !r.success);
+
+    if (failed.length === 0) {
+      // All models downloaded successfully
+      allProgress.push('All models downloaded successfully!');
+      sendModelDownloadStatus(
+        'Models Ready', 
+        'All required models have been downloaded and are ready to use.', 
+        allProgress.join('\n'),
+        true
+      );
+    } else {
+      // Any models failed to download - treat as critical error
+      const errorSummary = [
+        'Failed to download required models:',
+        ...failed.map(f => `• ${f.model}`),
+        '',
+        'The application will not work properly without these models.',
+        'Please check your configuration and fix the model names, then restart the application.'
+      ].join('\n');
+      
+      sendModelDownloadStatus(
+        'Model Download Failed', 
+        'Failed to download required models. The application will not work properly and should be fixed.', 
+        errorSummary,
+        true
+      );
+      
+      const failedModelsWithErrors = failed.map(f => {
+        const errorMsg = f.error instanceof Error ? f.error.message : String(f.error);
+        return `${f.model}: ${errorMsg}`;
+      }).join('; ');
+      
+      throw new Error(`Failed to download required models: ${failedModelsWithErrors}`);
+    }
+  } catch (error) {
+    log.error('Error in updateModels:', error);
+    
+    // Handle errors in the model checking process itself
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    
+    if (progressWindow && !progressWindow.isDestroyed()) {
+      progressWindow.webContents.send('show-error-dialog', {
+        title: 'Model Download Failed',
+        message: 'Failed to download required models. The application will not work properly.',
+        detail: `Error: ${errorMsg}\n\nPlease check your Ollama installation and configuration.`,
+        isModelDownload: false
+      });
+    }
   }
 }
 
@@ -67,8 +305,15 @@ async function initOllama(): Promise<boolean> {
     });
   }
 
-  await updateModels();
-  return true;
+  try {
+    await updateModels();
+    return true;
+  } catch (error) {
+    log.error('Failed to initialize models:', error);
+    // Don't fail completely - let the app start even if models failed
+    // The user will see the error dialog and can try to fix the configuration
+    return false;
+  }
 }
 
 async function stopOllama() {
@@ -83,21 +328,6 @@ async function stopOllama() {
   } else if (system === 'darwin' || system === 'linux') {
     exec('brew services stop ollama');
   }
-}
-
-/**
- * Check if the required models are available and download them if they are not
- */
-async function updateModels() {
-  const modelsList = await ollama.list();
-  const existingModelNames: string[] = modelsList.models.map((m) => m.model);
-
-  const config = configStore.getFullConfig();
-  const modelPromises = Object.values(config.models).map((model) =>
-    pullRequiredModel(model.name, existingModelNames),
-  );
-
-  await Promise.all(modelPromises);
 }
 
 /**
@@ -222,4 +452,4 @@ if (require.main === module) {
   })();
 }
 
-export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama };
+export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
