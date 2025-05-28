@@ -34,6 +34,7 @@ const validChannels = {
     'setup-complete',
     'setup-progress',
     'show-error-dialog',
+    'refresh-models-list',
   ],
 };
 
@@ -118,6 +119,12 @@ contextBridge.exposeInMainWorld('electron', {
     removeAllListeners: (channel: string) => {
       if (validChannels.on.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
+      }
+    },
+
+    removeListener: (channel: string, callback: (...args: any[]) => void) => {
+      if (validChannels.on.includes(channel)) {
+        ipcRenderer.removeListener(channel, callback);
       }
     },
   },

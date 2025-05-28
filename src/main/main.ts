@@ -162,7 +162,7 @@ const runFirstTimeSetup = async () => {
 };
 
 // Initialize main window
-const createWindow = async () => {
+const createWindow = async (): Promise<void> => {
   // Run first-time setup while loading window is shown
   await runFirstTimeSetup();
 
