@@ -89,6 +89,24 @@ function SettingsPanel({
     fetchModelsData();
   }, [fetchModelsData]);
 
+  // Listen for model refresh events from backend
+  useEffect(() => {
+    const handleModelsRefresh = () => {
+      fetchModelsData();
+    };
+
+    // Listen for the refresh event
+    window.electron.ipcRenderer.on('refresh-models-list', handleModelsRefresh);
+
+    // Cleanup listener on unmount
+    return () => {
+      window.electron.ipcRenderer.removeListener(
+        'refresh-models-list',
+        handleModelsRefresh,
+      );
+    };
+  }, [fetchModelsData]);
+
   // Handle model selection change
   const handleModelChange = async (e: ChangeEvent<HTMLSelectElement>) => {
     const newModelName = e.target.value;

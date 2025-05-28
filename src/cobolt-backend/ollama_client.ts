@@ -235,6 +235,15 @@ async function updateModels() {
         allProgress.join('\n'),
         true
       );
+      
+      // Update Models List in Settings Panel by triggering a refresh
+      if (progressWindow && !progressWindow.isDestroyed()) {
+        log.debug('Sending refresh-models-list event to renderer');
+        progressWindow.webContents.send('refresh-models-list');
+      } else {
+        log.error('progressWindow is not available to send refresh-models-list event');
+      }
+
     } else {
       // Any models failed to download - treat as critical error
       const errorSummary = [
