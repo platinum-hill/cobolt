@@ -48,8 +48,19 @@ Cobolt enables you to get answers based on your data, with a model of your choos
 - Native Memory Support: Cobolt remembers the most important things about you, and uses this to give you more relevant responses.
 
 ## Getting Started
-We use homebrew to install dependencies. If you are on macOS, ensure that homebrew package manager is installed with below script
+To get started, you'll need the appropriate package manager installed on your system.
+
+### MacOS
+On macOS, Homebrew is used to install dependencies. Ensure Homebrew is installed. To install it, run the following command in the Terminal:
 `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+
+### Windows 
+On Windows, Winget (the Windows Package Manager) is utilized.
+If you need to install Winget is available using PowerShell, run the following command as an administrator:
+`Install-Module -Name Microsoft.WinGet.Client -Repository PSGallery -Confirm:$false -AllowClobber; Repair-WinGetPackageManager;`
+
+You can confirm winget is present using powershell with 
+`winget -v`
 
 ## How to?
 
@@ -68,9 +79,11 @@ The downloaded model can be selected from the settings section on the app.
 
 > **Note:** If you want additional customization, you can update the models for tool use, inference, or embedding models individually:
 > 
-> On macOS: Edit `~/Library/Application Support/cobolt/config.json`
+> On Windows: Edit `%APPDATA%\cobolt\config.json` 
 > 
-> On Windows: Edit `%APPDATA%\cobolt\config.json`
+> On macOS: Edit `~/Library/Application Support/cobolt/config.json`
+>
+> On Linux: Edit `$HOME/.config/cobolt/config.json`
 > 
 > After editing, restart Cobolt for changes to take effect.
 
