@@ -29,11 +29,8 @@ function getPlatformInfo() {
     name = 'macOS';
     execCommand = `"${scriptPath}"`;
   } else if (isLinux) {
-    // We will not install dependencies on Linux, we will just check if they are installed
-    const scriptName = 'check_deps.sh';
-    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    // Skip Linux setup. The user must install dependencies manually.
     name = 'Linux';
-    execCommand = `"${scriptPath}"`;
   }
 
   const supported = isWindows || isMac || isLinux;

@@ -18,7 +18,6 @@ if command -v python3 &> /dev/null; then
     fi
 else
     echo "✗ Python 3 is not installed. Please install Python 3.11+."
-    print_install_instructions
     exit 1
 fi
 
@@ -31,7 +30,6 @@ for dep in $DEPENDENCIES; do
         echo "✓ $dep is installed."
     else
         echo "✗ $dep is not installed."
-        print_install_instructions
         exit 1
     fi
 done
@@ -42,16 +40,13 @@ if command -v ollama &> /dev/null; then
     echo "✓ Ollama is installed."
 else
     echo "✗ Ollama is not installed."
-    print_install_instructions
     exit 1
 fi
 
 echo ""
 echo "======================================================"
-echo "Note: If any dependencies are missing, please run:"
-echo "sudo ./linux_deps.sh"
+echo "Note: If any dependencies are missing, please run the appropriate script to install them."
+echo "Windows: run win_deps.ps1"
+echo "macOS: run mac_deps.sh"
+echo "Linux: run linux_deps.sh"
 echo "======================================================" 
-
-print_install_instructions() {
-    echo "Please run 'linux_deps.sh' to install missing dependencies." >&2
-}

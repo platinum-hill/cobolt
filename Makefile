@@ -9,5 +9,5 @@ install-deps:
 		pwsh -Command "& .\assets\scripts\win_deps.ps1"; \
 	else \
 		echo "Detected Unix/Linux. Checking dependencies..."; \
-		bash -ex assets/scripts/check_deps.sh; \
+		bash -ex assets/scripts/linux_deps.sh; \
 	fi
