@@ -49,7 +49,7 @@ Cobolt enables you to get answers based on your data, with a model of your choos
 - Native Memory Support: Cobolt remembers the most important things about you, and uses this to give you more relevant responses.
 
 ## Getting Started
-To get started, you'll need the appropriate package manager installed on your system.
+Before installing the appropriate binary from the [releases](https://github.com/platinum-hill/cobolt/releases), follow the below steps based on your operating system,
 
 ### MacOS
 On macOS, Homebrew is used to install dependencies. Ensure Homebrew is installed. To install it, run the following command in the Terminal:
@@ -60,7 +60,7 @@ On macOS, Homebrew is used to install dependencies. Ensure Homebrew is installed
 ### Linux:
 Before running the linux app, please install the required dependencies
 ```bash
-curl -O https://raw.githubusercontent.com/platinum-hill/cobolt/main/linux_deps.sh
+curl -O https://raw.githubusercontent.com/platinum-hill/cobolt/refs/heads/main/assets/scripts/linux_deps.sh
 chmod +x linux_deps.sh
 sudo ./linux_deps.sh
 ```
