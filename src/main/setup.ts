@@ -6,24 +6,39 @@ import appMetadata from '../cobolt-backend/data_models/app_metadata';
 
 // Get platform specific information required for initial setup
 function getPlatformInfo() {
+  log.info(`Platform: ${process.platform}`);
   const isWindows = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
+  const isLinux = process.platform === 'linux';
   const resourcesPath = app.isPackaged
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
 
-  const scriptName = isWindows ? 'win_deps.ps1' : 'mac_deps.sh';
-  const scriptPath = path.join(resourcesPath, 'scripts', scriptName);
   let execCommand = '';
+  let name = '';
+  let scriptPath = '';
+
   if (isWindows) {
+    const scriptName = 'win_deps.ps1';
+    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    name = 'Windows';
     execCommand = `powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}"`;
-  } else {
+  } else if (isMac) {
+    const scriptName = 'mac_deps.sh';
+    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    name = 'macOS';
     execCommand = `"${scriptPath}"`;
+  } else if (isLinux) {
+    // Skip Linux setup since it requires admin privileges.
+    // The user must install dependencies manually.
+    name = 'Linux';
   }
 
+  const supported = isWindows || isMac || isLinux;
+
   return {
-    supported: isWindows || isMac,
-    name: isWindows ? 'Windows' : 'macOS',
+    supported,
+    name,
     scriptPath,
     execCommand,
   };
@@ -81,6 +96,7 @@ async function checkAndRunFirstTimeSetup(
   mainWindow: BrowserWindow | null,
 ): Promise<boolean> {
   const platform = getPlatformInfo();
+  log.debug(`Platform ${platform.name}. Supported: ${platform.supported}`);
   if (!platform.supported) {
     log.info('Skipping setup for unsupported platform');
     appMetadata.setSetupComplete();

@@ -286,15 +286,14 @@ async function initOllama(): Promise<boolean> {
   try {
     await ollama.ps();
   } catch {
-    log.log('Error connecting to Ollama: Starting the ollama server');
+    log.log('Server not running: Starting the ollama server on platform:', platform);
     ollamaServerStartedByApp = true;
-    log.debug('Platform:', platform);
     const system: string = platform.toLowerCase();
-    if (system === 'win32') {
+    if (system === 'win32' || system === 'linux') {
       exec(
         'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
       );
-    } else if (system === 'darwin' || system === 'linux') {
+    } else if (system === 'darwin') {
       exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &');
     } else {
       log.log(`Unsupported operating system: ${system}`);
@@ -325,8 +324,10 @@ async function stopOllama() {
   const system: string = os.platform().toLowerCase();
   if (system === 'win32') {
     exec('taskkill /IM ollama.exe /F');
-  } else if (system === 'darwin' || system === 'linux') {
+  } else if (system === 'darwin') {
     exec('brew services stop ollama');
+  } else if (system === 'linux') {
+    exec('pkill -f ollama');
   }
 }
 
