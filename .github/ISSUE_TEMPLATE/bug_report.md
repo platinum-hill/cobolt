@@ -29,6 +29,13 @@ If applicable, add screenshots to help explain your problem.
 - Cobolt Version: [e.g. 0.0.1]
 - Device: [e.g. MacBook Pro M1, PC with Intel i7]
 
+## Logs
+- Please attach the log file or the relevant section from the logs. 
+- Log File Location: 
+  - Windows: `%APPDATA%\cobolt\logs\main.log` 
+  - macOS: `~/Library/Application Support/cobolt/logs/main.log`
+  - Linux: `$HOME/.config/cobolt/logs/main.log`
+
 ## Additional Context
 Add any other context about the problem here, such as:
 - Does the issue occur consistently or intermittently?
