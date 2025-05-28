@@ -8,6 +8,6 @@ install-deps:
 		echo "Detected Windows. Installing using winget..."; \
 		pwsh -Command "& .\assets\scripts\win_deps.ps1"; \
 	else \
-		echo "Detected Unix/Linux. Skipping install..."; \
-		bash -ex assets/scripts/mac_deps.sh; \
+		echo "Detected Unix/Linux. Checking dependencies..."; \
+		bash -ex assets/scripts/check_deps.sh; \
 	fi

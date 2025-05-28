@@ -14,23 +14,29 @@ function getPlatformInfo() {
     ? path.join(process.resourcesPath, 'assets')
     : path.join(__dirname, '../assets');
 
-  const scriptName = isWindows ? 'win_deps.ps1' : 'mac_deps.sh';
-  const scriptPath = path.join(resourcesPath, 'scripts', scriptName);
   let execCommand = '';
+  let name = '';
+  let scriptPath = '';
+
   if (isWindows) {
+    const scriptName = 'win_deps.ps1';
+    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    name = 'Windows';
     execCommand = `powershell.exe -ExecutionPolicy Bypass -File "${scriptPath}"`;
-  } else {
+  } else if (isMac) {
+    const scriptName = 'mac_deps.sh';
+    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    name = 'macOS';
+    execCommand = `"${scriptPath}"`;
+  } else if (isLinux) {
+    // We will not install dependencies on Linux, we will just check if they are installed
+    const scriptName = 'check_deps.sh';
+    scriptPath = path.join(resourcesPath, 'scripts', scriptName);
+    name = 'Linux';
     execCommand = `"${scriptPath}"`;
   }
 
   const supported = isWindows || isMac || isLinux;
-
-  let name = 'Linux';
-  if (isWindows) {
-    name = 'Windows';
-  } else if (isMac) {
-    name = 'macOS';
-  }
 
   return {
     supported,
