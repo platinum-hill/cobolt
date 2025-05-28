@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Clipboard } from 'lucide-react';
@@ -14,10 +14,34 @@ interface ChatInterfaceProps {
   currentChatId: string | null;
 }
 
+// Function to process message content and handle think tags
+const processMessageContent = (content: string) => {
+  const parts = content.split(/(<think>.*?<\/think>)/gs);
+  const thinkingBlocks: string[] = [];
+  const regularContent: string[] = [];
+
+  parts.forEach((part) => {
+    if (part.startsWith('<think>') && part.endsWith('</think>')) {
+      const thinkingContent = part.slice(7, -8); // Remove the tags
+      thinkingBlocks.push(thinkingContent);
+    } else {
+      regularContent.push(part);
+    }
+  });
+
+  return {
+    thinkingBlocks,
+    regularContent: regularContent.join(''),
+  };
+};
+
 function ChatInterface({
   currentChatId,
   isLoading: externalLoading,
 }: ChatInterfaceProps) {
+  const [collapsedThinking, setCollapsedThinking] = useState<{
+    [key: string]: boolean;
+  }>({});
   const {
     messages,
     inputMessage,
@@ -86,6 +110,13 @@ function ChatInterface({
     }
   };
 
+  const toggleThinking = (messageId: string) => {
+    setCollapsedThinking((prev) => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }));
+  };
+
   return (
     <div
       className={`chat-container ${hasMessages ? 'has-messages' : 'no-messages'}`}
@@ -95,35 +126,67 @@ function ChatInterface({
       </div>
 
       <div className="messages-container">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
-          >
-            {message.sender === 'assistant' ? (
-              <div className="assistant-message-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
-                <div className="message-actions">
-                  <button
-                    type="button"
-                    className="copy-button"
-                    onClick={() =>
-                      navigator.clipboard.writeText(message.content)
-                    }
-                    title="Copy"
-                    aria-label="Copy"
-                  >
-                    <Clipboard size={16} />
-                  </button>
+        {messages.map((message) => {
+          const { thinkingBlocks, regularContent } = processMessageContent(
+            message.content,
+          );
+          const hasThinking = thinkingBlocks.length > 0;
+
+          return (
+            <div
+              key={message.id}
+              className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
+            >
+              {message.sender === 'assistant' ? (
+                <div className="assistant-message-content">
+                  {hasThinking && (
+                    <div className="thinking-section">
+                      <button
+                        type="button"
+                        className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                        onClick={() => toggleThinking(message.id)}
+                        aria-expanded={!collapsedThinking[message.id]}
+                        aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
+                      >
+                        <div className="header-content">Reasoning</div>
+                      </button>
+                      <div
+                        className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                      >
+                        {thinkingBlocks.map((block, index) => (
+                          // eslint-disable-next-line react/no-array-index-key
+                          <div key={index} className="thinking-block">
+                            {block}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {regularContent}
+                  </ReactMarkdown>
+
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      className="copy-button"
+                      onClick={() =>
+                        navigator.clipboard.writeText(message.content)
+                      }
+                      title="Copy"
+                      aria-label="Copy"
+                    >
+                      <Clipboard size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              message.content
-            )}
-          </div>
-        ))}
+              ) : (
+                message.content
+              )}
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
