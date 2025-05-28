@@ -25,7 +25,7 @@ What actually happened instead.
 If applicable, add screenshots to help explain your problem.
 
 ## Environment
-- OS: [e.g. macOS 13.0, Windows 11]
+- OS: [e.g. macOS 13.0, Windows 11, Ubuntu 22.04, Fedora 39]
 - Cobolt Version: [e.g. 0.0.1]
 - Device: [e.g. MacBook Pro M1, PC with Intel i7]
 

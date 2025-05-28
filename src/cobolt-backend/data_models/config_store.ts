@@ -42,15 +42,15 @@ const store = new Store<ConfigSchema>({
     },
     models: {
       CHAT_MODEL: {
-        name: "llama3.1:8b",
+        name: "llama3.2:3b",
         contextLength: 8192
       },
       TOOLS_MODEL: {
-        name: "llama3.1:8b",
+        name: "llama3.2:3b",
         contextLength: 8192
       },
       MEMORY_MODEL: {
-        name: "llama3.1:8b"
+        name: "llama3.2:3b"
       },
       TEXT_EMBEDDING_MODEL: {
         name: "nomic-embed-text:v1.5",

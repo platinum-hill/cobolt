@@ -29,3 +29,4 @@ If applicable, add screenshots to help explain your changes.
 - [ ] Any dependent changes have been merged and published in downstream modules 
 - [ ] I have tested the app on Mac OS (If not, leave unchecked so we can test before merging)
 - [ ] I have tested the app on Windows (If not, leave unchecked so we can test before merging)
+- [ ] I have tested the app on Linux (If not, leave unchecked so we can test before merging)

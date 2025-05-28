@@ -4,7 +4,7 @@
   <img src="https://github.com/platinum-hill/cobolt/blob/main/assets/icon.png" width="128" height="128" alt="Cobolt Logo">
   
   [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-  [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey.svg)](#)
+  [![Platforms](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#)
   [![Version](https://img.shields.io/badge/Version-0.0.4-green.svg)](#)
   [![Downloads](https://img.shields.io/github/downloads/platinum-hill/cobolt/total.svg)](https://github.com/platinum-hill/cobolt/releases)
   [![Build Status](https://github.com/platinum-hill/cobolt/actions/workflows/test.yml/badge.svg)](https://github.com/platinum-hill/cobolt/actions/workflows/build.yml)
@@ -16,7 +16,8 @@
   
   [![macOS Download](https://img.shields.io/badge/macOS-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.4/Cobolt-0.0.3.dmg)
   [![Windows Download](https://img.shields.io/badge/Windows-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.4/Cobolt-Setup-0.0.3.exe)
-  
+  [![Linux Download](https://img.shields.io/badge/Linux-Download-blue.svg)](https://github.com/platinum-hill/cobolt/releases/download/v0.0.4/Cobolt-0.0.3.AppImage)
+
   <sub>This is an early release which is expected to be unstable and change significantly over time.
   For other platforms and previous versions, visit our [Releases](https://github.com/platinum-hill/cobolt/releases) page</sub>
 </div>
@@ -76,14 +77,16 @@ You can confirm winget is present using powershell with `winget -v`
 ## How to?
 
 ### How to change the model?
-By default we use [llama3.1:8b](https://ollama.com/library/llama3.1:8b) for inference, and [nomic-embed-text](https://ollama.com/library/nomic-embed-text) for embedding.
+By default we use [llama3.2:3b](https://ollama.com/library/llama3.2:3b) for inference, and [nomic-embed-text](https://ollama.com/library/nomic-embed-text) for embedding.
+
+If your device is capable of running larger models, we recommend llama3.1:8b, or qwen3:8b
 
 You can use any Ollama model that supports tool calls listed [here](https://ollama.com/search?c=tools). 
 To download a new model for inference install it from Ollama
 
 ```bash
 ollama ls # to view models
-ollama pull qwen3:8b # to download qwen3:8b
+ollama pull llama3.1:8b # to download llama3.1:8b
 ```
 
 The downloaded model can be selected from the settings section on the app.
@@ -96,6 +99,8 @@ The downloaded model can be selected from the settings section on the app.
 >
 > On Linux: Edit `$HOME/.config/cobolt/config.json`
 > 
+> On Linux: Edit `$HOME/.config/cobolt/config.json`
+>
 > After editing, restart Cobolt for changes to take effect.
 
 

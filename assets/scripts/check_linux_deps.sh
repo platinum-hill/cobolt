@@ -45,8 +45,6 @@ fi
 
 echo ""
 echo "======================================================"
-echo "Note: If any dependencies are missing, please run the appropriate script to install them."
-echo "Windows: run win_deps.ps1"
-echo "macOS: run mac_deps.sh"
-echo "Linux: run linux_deps.sh"
+echo "Note: If any dependencies are missing, please run the following command to install them:"
+echo "sudo ./assets/scripts/linux_deps.sh"
 echo "======================================================" 

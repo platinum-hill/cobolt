@@ -18,7 +18,7 @@ Dependencies required to build the application include:
 - npm or yarn
 - Python 3.x.x (For electron builder/ node-gyp)
 - Xcode Command Line Tools (For electron builder/ node-gyp) (MacOS)
-- Visual Studio (For electron builder/ node-gyp) (Windows
+- Visual Studio (For electron builder/ node-gyp) (Windows)
 
 >[!Note]
 > Cobolt uses electron-builder to build native dependencies against the current electron version. This uses node-gyp under the hood which requires Python and platform specific C++ compiler
