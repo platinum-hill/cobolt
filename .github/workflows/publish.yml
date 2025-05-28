@@ -65,3 +65,9 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm exec electron-builder -- --publish always --mac --linux
+
+      - name: Publish Linux release
+        if: matrix.platform == 'linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm exec electron-builder -- --publish always --linux
