@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - ga/bump-0.0.4
 
 jobs:
   build-and-publish:

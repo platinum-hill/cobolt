@@ -6,7 +6,7 @@ echo ""
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
-    echo "The app requires root privileges to install dependencies. Please start the app as root" >&2
+    echo "The app requires root privileges to install dependencies. Please rerun the script as root user" >&2
     exit 1
 fi
 

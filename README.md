@@ -52,15 +52,26 @@ To get started, you'll need the appropriate package manager installed on your sy
 
 ### MacOS
 On macOS, Homebrew is used to install dependencies. Ensure Homebrew is installed. To install it, run the following command in the Terminal:
-`/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+### Linux:
+Before running the linux app, please install the required dependencies
+```bash
+curl -O https://raw.githubusercontent.com/platinum-hill/cobolt/main/linux_deps.sh
+chmod +x linux_deps.sh
+sudo ./linux_deps.sh
+```
 
 ### Windows 
 On Windows, Winget (the Windows Package Manager) is utilized.
-If you need to install Winget is available using PowerShell, run the following command as an administrator:
-`Install-Module -Name Microsoft.WinGet.Client -Repository PSGallery -Confirm:$false -AllowClobber; Repair-WinGetPackageManager;`
+If you need to install Winget, run the following powershell command as an administrator:
+```powershell
+Install-Module -Name Microsoft.WinGet.Client -Repository PSGallery -Confirm:$false -AllowClobber; Repair-WinGetPackageManager;
+```
 
-You can confirm winget is present using powershell with 
-`winget -v`
+You can confirm winget is present using powershell with `winget -v`
 
 ## How to?
 
