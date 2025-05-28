@@ -29,7 +29,8 @@ function getPlatformInfo() {
     name = 'macOS';
     execCommand = `"${scriptPath}"`;
   } else if (isLinux) {
-    // Skip Linux setup. The user must install dependencies manually.
+    // Skip Linux setup since it requires admin privileges.
+    // The user must install dependencies manually.
     name = 'Linux';
   }
 
