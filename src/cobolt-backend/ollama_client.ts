@@ -291,6 +291,7 @@ async function updateModels() {
  * If the required models are not available, download them
  */
 async function initOllama(): Promise<boolean> {
+  log.info("Initializing Ollama");
   const platform = os.platform();
   try {
     await ollama.ps();
@@ -301,9 +302,12 @@ async function initOllama(): Promise<boolean> {
     if (system === 'win32' || system === 'linux') {
       exec(
         'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
+        logExecOutput(system)
       );
     } else if (system === 'darwin') {
-      exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &');
+      exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &',
+        logExecOutput('macOS')
+      );
     } else {
       log.log(`Unsupported operating system: ${system}`);
       return false;
@@ -332,11 +336,11 @@ async function stopOllama() {
   
   const system: string = os.platform().toLowerCase();
   if (system === 'win32') {
-    exec('taskkill /IM ollama.exe /F');
+    exec('taskkill /IM ollama.exe /F', logExecOutput(system));
   } else if (system === 'darwin') {
-    exec('brew services stop ollama');
+    exec('brew services stop ollama', logExecOutput(system));
   } else if (system === 'linux') {
-    exec('pkill -f ollama');
+    exec('pkill -f ollama', logExecOutput(system));
   }
 }
 
@@ -437,6 +441,20 @@ async function queryOllamaWithTools(requestContext: RequestContext,
 
 const getOllamaClient = (): Ollama => {
   return ollama
+}
+
+function logExecOutput(platform: string) {
+  return (error: any, stdout: string, stderr: string) => {
+    if (error) {
+      log.error(`${platform} exec error:`, error);
+    }
+    if (stdout) {
+      log.info(`${platform} exec stdout:`, stdout);
+    }
+    if (stderr) {
+      log.warn(`${platform} exec stderr:`, stderr);
+    }
+  };
 }
 
 if (require.main === module) {
