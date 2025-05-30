@@ -40,6 +40,7 @@ import { stopOllama, setProgressWindow } from '../cobolt-backend/ollama_client';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
+let initializationComplete: Promise<void> | null = null;
 
 log.initialize();
 
@@ -204,8 +205,9 @@ const createWindow = async (): Promise<void> => {
       mainWindow.show();
     }
 
-    // Initialize dependencies (this will trigger model downloads if needed)
-    await initDependencies();
+    // Store the initialization promise
+    initializationComplete = initDependencies();
+    await initializationComplete;
 
     // Store config error status but don't show dialog yet
     const hasMcpConfigErrors =
@@ -451,6 +453,10 @@ ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
 
 ipcMain.handle('get-available-models', async () => {
   try {
+    if (initializationComplete) {
+      await initializationComplete;
+    }
+
     const models = await getAvailableModels();
     return {
       success: true,
