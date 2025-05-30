@@ -1,5 +1,5 @@
 import { Ollama, Message, ChatResponse } from 'ollama';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
 import { FunctionTool } from './ollama_tools';
 import * as os from 'os';
@@ -302,9 +302,46 @@ async function initOllama(): Promise<boolean> {
     ollamaServerStartedByApp = true;
     const system: string = platform.toLowerCase();
     
-    if (system === 'win32' || system === 'linux') {
+    if (system === 'win32') {
+      // run in the background but capture a few initial log lines
+      const env = {
+        ...process.env,
+        OLLAMA_FLASH_ATTENTION: '1',
+        OLLAMA_KV_CACHE_TYPE: 'q4_0',
+      };
+
+      const child = spawn('ollama', ['serve'], {
+        env,
+        detached: true,          // keep running after parent continues
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+
+      // log only the first N lines to avoid flooding the log file
+      const MAX_LINES = 5;
+      let outCnt = 0;
+      let errCnt = 0;
+
+      child.stdout.on('data', (data) => {
+        if (outCnt++ < MAX_LINES) {
+          log.info(`win32 ollama stdout: ${data.toString().trim()}`);
+        }
+      });
+
+      child.stderr.on('data', (data) => {
+        if (errCnt++ < MAX_LINES) {
+          log.warn(`win32 ollama stderr: ${data.toString().trim()}`);
+        }
+      });
+
+      child.on('error', (err) => log.error('win32 ollama spawn error:', err));
+
+      // let the child continue independently
+      child.unref();
+
+    } else if (system === 'linux') {
       exec(
-        'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
+        'OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 ollama serve &',
         logExecOutput(system)
       );
     } else if (system === 'darwin') {
