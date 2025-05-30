@@ -292,12 +292,15 @@ async function updateModels() {
  */
 async function initOllama(): Promise<boolean> {
   const platform = os.platform();
+  
   try {
     await ollama.ps();
+    log.log('Ollama server is already running');
   } catch {
     log.log('Server not running: Starting the ollama server on platform:', platform);
     ollamaServerStartedByApp = true;
     const system: string = platform.toLowerCase();
+    
     if (system === 'win32' || system === 'linux') {
       exec(
         'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
@@ -306,11 +309,34 @@ async function initOllama(): Promise<boolean> {
       exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &');
     } else {
       log.log(`Unsupported operating system: ${system}`);
+      
       return false;
     }
+    
     await new Promise(function sleep(resolve) {
       setTimeout(resolve, OLLAMA_START_TIMEOUT);
     });
+    
+    try {
+      await ollama.ps();
+      log.log('Ollama server started successfully');
+    } catch (startupError) {
+      log.error('Failed to start Ollama server. Please start Ollama manually and restart the application. Error:', startupError);
+      
+      // Throw the error to be handled by the calling code
+      throw new Error(
+        `Ollama startup failed. Failed to start Ollama server automatically.
+        
+        Please start Ollama manually and restart the application.
+        The application attempted to start Ollama but it is not responding. Please:
+        1. Check if Ollama is installed correctly
+        2. Start Ollama manually (run "ollama serve" in terminal)
+        3. Restart this application
+        
+        If the problem persists, check the Ollama installation and try running "ollama --version" in your terminal.
+        Error: ${startupError instanceof Error ? startupError.message : String(startupError)}`
+      );
+    }
   }
 
   try {
