@@ -31,7 +31,12 @@ const memoryConfig = {
         model: MODELS.MEMORY_MODEL,
       },
     },
-    historyDbPath: path.join(appDataPath, "memory-history.db")
+    historyStore: {
+      provider: "sqlite",
+      config: {
+        historyDbPath: path.join(appDataPath, "memory-history.db"),
+      },
+    }
 }
 
 // Initialize memory instance as undefined to allow for proper type checking
