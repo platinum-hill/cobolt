@@ -15,7 +15,7 @@
     "link-modules": "node -r ts-node/register ../../scripts/link-modules.ts"
   },
   "dependencies": {
-    "mem0ai": "^2.1.10",
+    "mem0ai": "^2.1.27",
     "sqlite3": "^5.1.7"
   }
 }
