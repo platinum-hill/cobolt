@@ -43,9 +43,10 @@ class QueryEngine {
         cancellationToken);
     }
     const toolMessages: Message[] = [];
+    const capturedToolCalls: Array<{name: string, arguments: string, result: string, isError?: boolean}> = [];
 
-    // Handle tool calls. Use tools to get the relevant documents
-    // As of now these tools only do deterministic filtering
+    // Handle tool calls
+    // All tool results are fed back to the AI for context
     for (const toolCall of response.message.tool_calls) {
       if (cancellationToken.isCancelled) {
         TraceLogger.trace(requestContext, 'tool_execution_cancelled', 
@@ -62,39 +63,75 @@ class QueryEngine {
       if (tool.type === "mcp") {
         const toolResponse = await tool.mcpFunction(requestContext, toolCall);
 
-        if (toolResponse.isError) {
-          TraceLogger.trace(requestContext, `
-            processRagRatQuery-${toolName}`, `tool call failed`);
-          continue;
-        }
-        if (!toolResponse.content) {
-          TraceLogger.trace(requestContext, `
-            processRagRatQuery-${toolName}`, `tool call returned no content`);
-          continue;
-        }
+        // Capture tool call information for UI display
+        const toolCallInfo = {
+          name: toolName,
+          arguments: JSON.stringify(toolCall.function.arguments, null, 2),
+          result: '',
+          isError: false
+        };
 
-        // Check if it's a text content
-        for (const item of toolResponse.content) {
-          if (item.type === "text") {
-            toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, item.text as string) });
+        if (toolResponse.isError) {
+          toolCallInfo.isError = true;
+          toolCallInfo.result = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
+          // ALWAYS add tool message for AI feedback, even on error
+          toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${toolCallInfo.result}`) });
+          capturedToolCalls.push(toolCallInfo);
+          TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call failed`);
+        } else if (!toolResponse.content || toolResponse.content.length === 0) {
+          toolCallInfo.result = 'Tool executed successfully (no content returned)';
+          // ALWAYS add tool message for AI feedback
+          toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
+          capturedToolCalls.push(toolCallInfo);
+          TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call completed with no content`);
+        } else {
+          // Process ALL content types, not just text
+          let resultText = '';
+          for (const item of toolResponse.content) {
+            if (item.type === "text") {
+              resultText += item.text as string;
+            } else {
+              // Convert non-text content to string for AI feedback
+              resultText += JSON.stringify(item);
+            }
           }
+          
+          toolCallInfo.result = resultText || 'Tool executed successfully';
+          // ALWAYS add tool message for AI feedback
+          toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
+          capturedToolCalls.push(toolCallInfo);
+          TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call completed successfully`);
         }
       }
     }
 
-    // If none of the requested tools returned any valid documents
-    // prompt ollama again informing it of the tool request failure
+    // If no tool messages were generated
+    // fall back to simple chat without tool context
     if (toolMessages.length === 0) {
-      TraceLogger.trace(requestContext, 'processRagRatQuery', 'no tools returned documents');
-      const toolCallFailedSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString());
-      return simpleChatOllamaStream(requestContext, toolCallFailedSystemPrompt, memories);
+      TraceLogger.trace(requestContext, 'processRagRatQuery', 'no tool messages generated (unexpected)');
+      const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
+      // Include our tool calls metadata for transparency
+      const toolCallsMetadata = capturedToolCalls.length > 0 ? 
+        `<tool_calls>${JSON.stringify(capturedToolCalls)}</tool_calls>` : '';
+      return this.wrappedStreamWithToolCalls(
+        simpleChatOllamaStream(requestContext, chatSystemPrompt, memories),
+        cancellationToken,
+        toolCallsMetadata
+      );
     }
 
     // create tool prompts for the final query
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
-    return this.wrappedStream(
+    
+    // Create tool calls metadata for frontend
+    const toolCallsMetadata = capturedToolCalls.length > 0 ? 
+      `<tool_calls>${JSON.stringify(capturedToolCalls)}</tool_calls>` : '';
+    
+    // Wrap the stream to include tool calls metadata at the beginning
+    return this.wrappedStreamWithToolCalls(
       simpleChatOllamaStream(requestContext, chatSystemPrompt, memories, toolMessages),
-      cancellationToken
+      cancellationToken,
+      toolCallsMetadata
     );
   }
 
@@ -128,6 +165,37 @@ class QueryEngine {
           break;
         }
         yield chunk;
+      }
+    } finally {
+      // Ensure we don't leave the token in cancelled state
+      cancellationToken.reset();
+    }
+  }
+
+  /**
+   * Wrap a stream generator with cancellation check and tool calls metadata
+   */
+  private async *wrappedStreamWithToolCalls(
+    stream: AsyncGenerator<string>,
+    cancellationToken: CancellationToken,
+    toolCallsMetadata: string
+  ): AsyncGenerator<string> {
+    try {
+      let isFirstChunk = true;
+      for await (const chunk of stream) {
+        if (cancellationToken.isCancelled) {
+          TraceLogger.trace({ requestId: "cancelled", currentDatetime: new Date(), question: "", chatHistory: new ChatHistory() }, 
+            'stream_cancelled', 'User cancelled the request');
+          break;
+        }
+        
+        // Prepend tool calls metadata to the first chunk if we have tool calls
+        if (isFirstChunk && toolCallsMetadata) {
+          yield toolCallsMetadata + chunk;
+          isFirstChunk = false;
+        } else {
+          yield chunk;
+        }
       }
     } finally {
       // Ensure we don't leave the token in cancelled state
