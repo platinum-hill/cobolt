@@ -376,9 +376,6 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
   try {
     globalCancellationToken.reset();
 
-    // Add the user message to chat history
-    chatHistory.addUserMessage(message);
-
     // Store message in the database linked to specific chat
     await persistentChatHistory.addMessageToChat(chatId, 'user', message);
 
@@ -448,6 +445,7 @@ ipcMain.handle('get-memory-enabled', () => {
 
 ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
   updateMemoryEnabled(enabled);
+  log.info('Memory enabled set to: ', enabled);
   return true;
 });
 
