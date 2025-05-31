@@ -12,7 +12,7 @@ interface TypedStore<T extends Record<string, any>> extends Store<T> {
 
 const store = new Store<AppMetadataSchema>({
   name: 'app-metadata',
-  projectName: 'sage',
+  projectName: 'cobolt',
   defaults: {
     setupComplete: false,
     memoryEnabled: false,
