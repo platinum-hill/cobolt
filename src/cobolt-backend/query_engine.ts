@@ -120,7 +120,7 @@ class QueryEngine {
       );
     }
 
-    // create tool prompts for the final query
+    // Create tool prompts for the final query
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
     // Create tool calls metadata for frontend
