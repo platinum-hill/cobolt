@@ -1,23 +1,4 @@
 /**
- * Rewrites a user search query to be clearer and more specific, generating 2-3 alternative phrasings.
- * Intended to improve search engine performance while maintaining the original intent.
- *
- * @param question - The original user search query.
- * @returns A prompt string for an LLM to generate alternative queries.
- *
- * @example
- * const prompt = createQueryPrompt('How do I fix a TypeError in JavaScript?');
- */
-function createQueryPrompt(question: string): string {
-  return `Rewrite the following search query to be more clear and specific, focusing on the user's likely intent.
-Maintain the core meaning but improve search engine performance. Generate 2-3 alternative phrasings of this question and nothing else. You do not need to explain yourself.
-
-Original Query: ${question}
-
-Rewritten Query: `;
-}
-
-/**
  * Creates a prompt for a helpful AI assistant to answer user questions in a chat context.
  *
  * @param currentDateTime - The current date and time as an ISO string.
@@ -36,40 +17,6 @@ function createChatPrompt(
 4. Professional yet friendly
 
 Current Date & Time: ${currentDateTime}.`;
-}
-
-/**
- * Creates a prompt for a Retrieval-Augmented Generation (RAG) scenario, using context and optional user memories.
- *
- * @param currentDateTime - The current date and time as an ISO string.
- * @param question - The user's question.
- * @param context - The retrieved context to answer the question.
- * @param memories - Optional user memories to supplement the answer.
- * @returns A prompt string for the LLM to answer using context and memories.
- *
- * @example
- * const prompt = createRagPrompt('2025-05-25T12:00:00Z', 'What is my next meeting?', 'You have a meeting at 3pm.', '');
- */
-function createRagPrompt(
-  currentDateTime: string,
-  question: string,
-  context: string,
-  memories: string,
-): string {
-  const memoriesSection = memories ? `User Memories: ${memories}` : '';
-
-  return `You are a helpful AI assistant. Use the following context${memories ? ' and memories' : ''} to answer the question.
-If you cannot find the answer in the context, summarize the context itself and end by saying "I cannot find the answer in the provided context."
-Current Date & Time: ${currentDateTime}.
-
-Context:
-${context}
-
-${memoriesSection}
-
-User: ${question}
-
-Answer: `;
 }
 
 /**
@@ -169,10 +116,8 @@ Current Date & Time: ${currentDateTime}.
 }
 
 export {
-  createQueryPrompt,
   createPlanPrompt,
   createChatPrompt,
-  createRagPrompt,
   createQueryWithToolsPrompt,
   createQueryWithToolResponsePrompt,
   createQueryToolFailure
