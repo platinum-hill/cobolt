@@ -168,30 +168,6 @@ function ChatInterface({
             >
               {message.sender === 'assistant' ? (
                 <div className="assistant-message-content">
-                  {hasThinking && (
-                    <div className="thinking-section">
-                      <button
-                        type="button"
-                        className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                        onClick={() => toggleThinking(message.id)}
-                        aria-expanded={!collapsedThinking[message.id]}
-                        aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
-                      >
-                        <div className="header-content">Reasoning</div>
-                      </button>
-                      <div
-                        className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                      >
-                        {thinkingBlocks.map((block, index) => (
-                          // eslint-disable-next-line react/no-array-index-key
-                          <div key={index} className="thinking-block">
-                            {block}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {hasToolCalls && (
                     <div className="tool-calls-section">
                       <button
@@ -231,6 +207,30 @@ function ChatInterface({
                                 {toolCall.result}
                               </div>
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {hasThinking && (
+                    <div className="thinking-section">
+                      <button
+                        type="button"
+                        className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                        onClick={() => toggleThinking(message.id)}
+                        aria-expanded={!collapsedThinking[message.id]}
+                        aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
+                      >
+                        <div className="header-content">Reasoning</div>
+                      </button>
+                      <div
+                        className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                      >
+                        {thinkingBlocks.map((block, index) => (
+                          // eslint-disable-next-line react/no-array-index-key
+                          <div key={index} className="thinking-block">
+                            {block}
                           </div>
                         ))}
                       </div>
