@@ -14,9 +14,27 @@ interface ChatInterfaceProps {
   currentChatId: string | null;
 }
 
-// Function to process message content and handle think tags
+// Function to process message content and handle think tags and tool calls
 const processMessageContent = (content: string) => {
-  const parts = content.split(/(<think>.*?<\/think>)/gs);
+  // First extract tool calls
+  const toolCallMatch = content.match(/<tool_calls>(.*?)<\/tool_calls>/s);
+  let toolCalls: any[] = [];
+  let contentWithoutToolCalls = content;
+
+  if (toolCallMatch) {
+    try {
+      toolCalls = JSON.parse(toolCallMatch[1]);
+      contentWithoutToolCalls = content.replace(
+        /<tool_calls>.*?<\/tool_calls>/s,
+        '',
+      );
+    } catch (error) {
+      log.error('Failed to parse tool calls:', error);
+    }
+  }
+
+  // Then extract thinking blocks from the remaining content
+  const parts = contentWithoutToolCalls.split(/(<think>.*?<\/think>)/gs);
   const thinkingBlocks: string[] = [];
   const regularContent: string[] = [];
 
@@ -31,6 +49,7 @@ const processMessageContent = (content: string) => {
 
   return {
     thinkingBlocks,
+    toolCalls,
     regularContent: regularContent.join(''),
   };
 };
@@ -40,6 +59,9 @@ function ChatInterface({
   isLoading: externalLoading,
 }: ChatInterfaceProps) {
   const [collapsedThinking, setCollapsedThinking] = useState<{
+    [key: string]: boolean;
+  }>({});
+  const [collapsedToolCalls, setCollapsedToolCalls] = useState<{
     [key: string]: boolean;
   }>({});
   const {
@@ -117,6 +139,13 @@ function ChatInterface({
     }));
   };
 
+  const toggleToolCalls = (messageId: string) => {
+    setCollapsedToolCalls((prev) => ({
+      ...prev,
+      [messageId]: prev[messageId] === false,
+    }));
+  };
+
   return (
     <div
       className={`chat-container ${hasMessages ? 'has-messages' : 'no-messages'}`}
@@ -127,10 +156,10 @@ function ChatInterface({
 
       <div className="messages-container">
         {messages.map((message) => {
-          const { thinkingBlocks, regularContent } = processMessageContent(
-            message.content,
-          );
+          const { thinkingBlocks, toolCalls, regularContent } =
+            processMessageContent(message.content);
           const hasThinking = thinkingBlocks.length > 0;
+          const hasToolCalls = toolCalls.length > 0;
 
           return (
             <div
@@ -139,6 +168,51 @@ function ChatInterface({
             >
               {message.sender === 'assistant' ? (
                 <div className="assistant-message-content">
+                  {hasToolCalls && (
+                    <div className="tool-calls-section">
+                      <button
+                        type="button"
+                        className={`thinking-header ${collapsedToolCalls[message.id] === false ? '' : 'collapsed'}`}
+                        onClick={() => toggleToolCalls(message.id)}
+                        aria-expanded={collapsedToolCalls[message.id] === false}
+                        aria-label={`${collapsedToolCalls[message.id] === false ? 'Collapse' : 'Expand'} tool calls section`}
+                      >
+                        <div className="header-content">
+                          MCP Tool Calls ({toolCalls.length})
+                        </div>
+                      </button>
+                      <div
+                        className={`thinking-content ${collapsedToolCalls[message.id] === false ? '' : 'collapsed'}`}
+                      >
+                        {toolCalls.map((toolCall, index) => (
+                          // eslint-disable-next-line react/no-array-index-key
+                          <div key={index} className="tool-call-block">
+                            <div className="tool-call-header">
+                              <strong>{toolCall.name}</strong>
+                              {toolCall.isError && (
+                                <span className="error-badge">Error</span>
+                              )}
+                            </div>
+                            <div className="tool-call-args">
+                              <div className="section-label">Arguments:</div>
+                              <pre className="code-block">
+                                {toolCall.arguments}
+                              </pre>
+                            </div>
+                            <div className="tool-call-result">
+                              <div className="section-label">Result:</div>
+                              <div
+                                className={`result-content ${toolCall.isError ? 'error' : ''}`}
+                              >
+                                {toolCall.result}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {hasThinking && (
                     <div className="thinking-section">
                       <button
