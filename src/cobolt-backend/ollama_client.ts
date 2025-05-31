@@ -474,9 +474,10 @@ async function queryOllamaWithTools(requestContext: RequestContext,
   systemPrompt: string,
   toolCalls: FunctionTool[],
   memories: string = ''): Promise<ChatResponse> {
+  
   const messages: Message[] = [
     { role: 'system', content: systemPrompt },
-  ]
+  ];
   
   if (memories) {
     messages.push({ role: 'tool', content: 'User Memories: ' + memories });
@@ -488,7 +489,8 @@ async function queryOllamaWithTools(requestContext: RequestContext,
     });
   }
   messages.push({ role: 'user', content: requestContext.question });
-  return ollama.chat({
+  
+  const response = await ollama.chat({
     model: MODELS.TOOLS_MODEL,
     keep_alive: -1,
     messages: messages,
@@ -499,7 +501,28 @@ async function queryOllamaWithTools(requestContext: RequestContext,
       top_p: defaultTopP,
       num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
     },
+    stream: true,
   });
+  
+  let content = '';
+  let tool_calls: any[] = [];
+  
+  for await (const part of response) {
+    if (part.message.tool_calls && part.message.tool_calls.length > 0) {
+      tool_calls.push(...part.message.tool_calls);
+    }
+    if (part.message.content) {
+      content += part.message.content;
+    }
+  }
+  
+  return {
+    message: {
+      role: 'assistant',
+      content: content,
+      tool_calls: tool_calls.length > 0 ? tool_calls : undefined
+    }
+  } as ChatResponse;
 }
 
 const getOllamaClient = (): Ollama => {
