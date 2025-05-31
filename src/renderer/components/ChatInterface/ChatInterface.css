@@ -796,3 +796,105 @@
   overflow: hidden;
   border-top: none;
 }
+
+/* Tool calls section styles */
+.tool-calls-section {
+  margin: 0 0 0.5rem 0;
+  border: 1px solid rgba(124, 169, 126, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 0.85em;
+}
+
+.tool-call-block {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(124, 169, 126, 0.05);
+}
+
+.tool-call-block:last-child {
+  border-bottom: none;
+}
+
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: rgba(143, 185, 150, 0.9);
+}
+
+.error-badge {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7em;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tool-call-args,
+.tool-call-result {
+  margin-bottom: 0.5rem;
+}
+
+.section-label {
+  font-weight: 500;
+  color: rgba(143, 185, 150, 0.7);
+  margin-bottom: 0.25rem;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.code-block {
+  background-color: rgba(30, 35, 41, 0.6);
+  border: 1px solid rgba(124, 169, 126, 0.1);
+  border-radius: 3px;
+  padding: 0.5rem;
+  font-family: monospace;
+  font-size: 0.8em;
+  color: rgba(197, 216, 188, 0.8);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.result-content {
+  background-color: rgba(124, 169, 126, 0.02);
+  border: 1px solid rgba(124, 169, 126, 0.1);
+  border-radius: 3px;
+  padding: 0.5rem;
+  color: rgba(197, 216, 188, 0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 0.8em;
+}
+
+.result-content.error {
+  background-color: rgba(244, 67, 54, 0.05);
+  border-color: rgba(244, 67, 54, 0.2);
+  color: rgba(244, 67, 54, 0.8);
+}
+
+/* Tool calls section custom scrollbar */
+.tool-calls-section .thinking-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tool-calls-section .thinking-content::-webkit-scrollbar-track {
+  background: rgba(124, 169, 126, 0.05);
+}
+
+.tool-calls-section .thinking-content::-webkit-scrollbar-thumb {
+  background: rgba(124, 169, 126, 0.2);
+  border-radius: 2px;
+}
+
+.tool-calls-section .thinking-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(124, 169, 126, 0.3);
+}
