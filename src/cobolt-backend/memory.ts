@@ -39,6 +39,12 @@ const memoryConfig = {
     }
 }
 
+console.log('DEBUG Memory config:', {
+  embeddingModel: MODELS.TEXT_EMBEDDING_MODEL,
+  memoryModel: MODELS.MEMORY_MODEL,
+  dimension: MODELS.TEXT_EMBEDDING_MODEL_DIMENSION
+});
+
 // Initialize memory instance as undefined to allow for proper type checking
 let memory: Memory | undefined;
 let memoryEnabled: boolean; 
@@ -64,11 +70,46 @@ function initMemory(): void {
  * Adds messages to the memory store
  * @param messages Array of messages to add to memory
  */
+/* og
 async function addToMemory(messages: Message[]): Promise<void> {
     if (!memoryEnabled) {
       return;
     }
     await memory?.add(messages, {userId: "userid"});
+}
+*/
+async function addToMemory(messages: Message[]): Promise<void> {
+    console.log('DEBUG addToMemory called with:', messages);
+    console.log('DEBUG memoryEnabled:', memoryEnabled);
+    
+    if (!memoryEnabled) {
+      console.log('ERROR Memory disabled, returning');
+      return;
+    }
+    
+    console.log('DEBUG Memory instance:', memory ? 'exists' : 'null');
+    
+    if (!memory) {
+      console.log('DEBUG Initializing memory...');
+      initMemory();
+      console.log('DEBUG Memory after init:', memory ? 'exists' : 'still null');
+    }
+    
+    try {
+      console.log('DEBUG About to call memory.add()...');
+      console.log('DEBUG Memory config being used:', memoryConfig);
+      
+      // Try to test the embedder directly first
+      console.log('DEBUG Testing embedder...');
+      const testResult = await memory?.embedder?.embed('test message');
+      console.log('DEBUG Embedder test result:', testResult);
+      
+      const result = await memory?.add(messages, {userId: "userid"});
+      console.log('SUCCESS memory.add() result:', result);
+    } catch (error) {
+      console.log('ERROR memory.add() threw error:', error);
+      throw error;
+    }
 }
 
 /**

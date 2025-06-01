@@ -347,6 +347,17 @@ class QueryEngine {
           tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
         });
         
+        // SAVE TO MEMORY AFTER EVERY RESPONSE
+        if (assistantContent.trim()) {
+          console.log('💾 Saving response to memory:', assistantContent.substring(0, 50) + '...');
+          addToMemory([
+            { role: 'user', content: requestContext.question },
+            { role: 'assistant', content: assistantContent }
+          ]).catch((error) => {
+            console.error('❌ Memory save failed:', error);
+          });
+        }
+
         // Log what the AI said in this round
         TraceLogger.trace(requestContext, 'single-conversation-assistant-content', `AI said: ${assistantContent}`);
         TraceLogger.trace(requestContext, 'single-conversation-detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
@@ -450,25 +461,7 @@ class QueryEngine {
         // Continue conversation with tool results
         // The loop will start another round with the updated conversation
       }
-      
-      // Save final conversation to memory when complete
-      if (conversationComplete && conversationMessages.length > 0) {
-        const assistantMessages = conversationMessages.filter(msg => msg.role === 'assistant');
-        const finalAssistantResponse = assistantMessages.map(msg => msg.content || '').join(' ');
-        
-        // Log the final assistant response
-        TraceLogger.trace(requestContext, 'single-conversation-final-response', `Final response: ${finalAssistantResponse}`);
-        
-        // Save to memory in background (not working?)
-        addToMemory([
-          { role: 'user', content: requestContext.question },
-          { role: 'assistant', content: finalAssistantResponse }
-        ]).catch((error) => {
-          console.error('Error adding response to memory:', error);
-        });
-      }
-      
-    } catch (error) {
+      } catch (error) {
       console.error('Error in response generator:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       yield `\nError processing response: ${errorMessage}`;
