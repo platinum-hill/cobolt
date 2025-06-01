@@ -1,6 +1,6 @@
 import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
-import { queryOllamaWithTools, simpleChatOllamaStream, getOllamaClient } from './ollama_client';
+import { simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
 import { searchMemories, addToMemory } from './memory';
@@ -11,11 +11,14 @@ import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 
 class QueryEngine {
+  
+  
   /**
    * V1 RAT | RAG query pipeline
    * @param requestContext 
    * @returns 
    */
+  /* Saving this for future reference
   async processRagRatQuery(
     requestContext: RequestContext,
     toolCalls: FunctionTool[],
@@ -135,7 +138,8 @@ class QueryEngine {
       toolCallsMetadata
     );
   }
-  
+  */
+
   /**
    * Create a generator that processes the streaming response and executes tools in real-time
    */
@@ -350,9 +354,8 @@ class QueryEngine {
   }
 
   /**
-   * Experimental: Sequential conversation with inline tool calling
-   * This allows tools to be called dynamically during the conversation
-   * based on what the AI learns as it goes
+   * Sequential response with inline tool calling
+   * This allows tools to be called dynamically during the response
    */
   async processSequentialConversationQuery(
     requestContext: RequestContext,
@@ -366,7 +369,7 @@ class QueryEngine {
     // Use chat prompt (not tool planning prompt)
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
-    return this.createSequentialConversationGenerator(
+    return this.createSequentialResponseGenerator(
       requestContext, 
       chatSystemPrompt,
       toolCalls, 
@@ -376,9 +379,9 @@ class QueryEngine {
   }
 
   /**
-   * Creates a generator for sequential conversation with inline tool calling
+   * Creates a generator for sequential inline tool calling response
    */
-  private async *createSequentialConversationGenerator(
+  private async *createSequentialResponseGenerator(
     requestContext: RequestContext,
     systemPrompt: string,
     toolCalls: FunctionTool[],
@@ -584,7 +587,7 @@ class QueryEngine {
         // Log the final assistant response
         TraceLogger.trace(requestContext, 'single-conversation-final-response', `Final response: ${finalAssistantResponse}`);
         
-        // Save to memory in background
+        // Save to memory in background (not working?)
         addToMemory([
           { role: 'user', content: requestContext.question },
           { role: 'assistant', content: finalAssistantResponse }

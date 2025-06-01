@@ -214,25 +214,9 @@ const processMessageContent = (content: string) => {
     currentToolCallIndex++;
   }
   
-  // Return properly ordered content blocks
-  if (contentBlocks.length > 0) {
-    return {
-      contentBlocks,
-      // Legacy compatibility
-      toolCalls: Array.from(toolCallsMap.values()),
-      thinkingBlocks: contentBlocks
-        .filter(block => block.type === 'thinking')
-        .map(block => safeStringify(block.thinkingContent || '')),
-      regularContent: contentBlocks
-        .filter(block => block.type === 'text')
-        .map(block => safeStringify(block.content || ''))
-        .join('')
-    };
-  }
-  
+  // Return properly ordered content blocks 
   return {
     contentBlocks,
-    // Legacy compatibility  
     toolCalls: Array.from(toolCallsMap.values()),
     thinkingBlocks: contentBlocks
       .filter(block => block.type === 'thinking')
@@ -461,7 +445,7 @@ function ChatInterface({
               {message.sender === 'assistant' ? (
                 <div className="assistant-message-content">
                   {hasContentBlocks ? (
-                    // NEW: Sequential rendering of content blocks
+                    // Sequential rendering of content blocks
                     contentBlocks.map((block, blockIndex) => {
                       if (block.type === 'text') {
                         try {

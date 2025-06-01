@@ -464,7 +464,8 @@ async function* simpleChatOllamaStream(requestContext: RequestContext,
   });
 }
 
-// Keep original function for backward compatibility during transition
+// Keep original function for future reference
+/*
 async function queryOllamaWithTools(requestContext: RequestContext,
   systemPrompt: string,
   toolCalls: FunctionTool[],
@@ -519,6 +520,7 @@ async function queryOllamaWithTools(requestContext: RequestContext,
     }
   } as ChatResponse;
 }
+*/
 
 const getOllamaClient = (): Ollama => {
   return ollama
@@ -538,6 +540,8 @@ function logExecOutput(platform: string) {
   };
 }
 
+/* Not sure what this is maybe a test
+// Commentted out because queryOllamaWithTools() is changing
 if (require.main === module) {
   (async () => {
     await initOllama();
@@ -560,5 +564,5 @@ if (require.main === module) {
     }
   })();
 }
-
-export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
+*/
+export { initOllama, getOllamaClient, simpleChatOllamaStream, stopOllama, setProgressWindow };
