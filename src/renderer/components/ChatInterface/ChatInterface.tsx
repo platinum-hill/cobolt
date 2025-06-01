@@ -73,88 +73,6 @@ interface ChatInterfaceProps {
   currentChatId: string | null;
 }
 
-// Function to process message content and handle think tags and tool calls
-const processMessageContentOLD = (content: string) => {
-  let toolCalls: any[] = [];
-  let contentWithoutToolCalls = content;
-  
-  // Extract real-time tool updates FIRST (executing status)
-  const toolUpdateMatches = content.matchAll(/<tool_calls_update>(.*?)<\/tool_calls_update>/gs);
-  for (const match of toolUpdateMatches) {
-    try {
-      const updateToolCalls = JSON.parse(match[1]);
-      // Add new tool calls with executing status
-      updateToolCalls.forEach((updateTool: any) => {
-        const existingIndex = toolCalls.findIndex(tool => tool.name === updateTool.name && 
-          tool.arguments === updateTool.arguments);
-        if (existingIndex >= 0) {
-          toolCalls[existingIndex] = updateTool;
-        } else {
-          toolCalls.push(updateTool);
-        }
-      });
-      
-      // Remove update tags from content
-      contentWithoutToolCalls = contentWithoutToolCalls.replace(
-        /<tool_calls_update>.*?<\/tool_calls_update>/s,
-        '',
-      );
-    } catch (error) {
-      log.error('Failed to parse tool call updates:', error);
-    }
-  }
-
-  // Extract final tool calls LAST (preserve execution status from above)
-  const toolCallMatch = content.match(/<tool_calls>(.*?)<\/tool_calls>/s);
-  if (toolCallMatch) {
-    try {
-      const finalToolCalls = JSON.parse(toolCallMatch[1]);
-      // Merge final tool calls but preserve isExecuting status
-      finalToolCalls.forEach((finalTool: any) => {
-        const existingIndex = toolCalls.findIndex(tool => tool.name === finalTool.name && 
-          tool.arguments === finalTool.arguments);
-        if (existingIndex >= 0) {
-          // Preserve isExecuting status from real-time updates
-          const existingTool = toolCalls[existingIndex];
-          toolCalls[existingIndex] = { 
-            ...finalTool, 
-            isExecuting: existingTool.isExecuting !== undefined ? existingTool.isExecuting : false 
-          };
-        } else {
-          toolCalls.push({ ...finalTool, isExecuting: false });
-        }
-      });
-      
-      contentWithoutToolCalls = contentWithoutToolCalls.replace(
-        /<tool_calls>.*?<\/tool_calls>/s,
-        '',
-      );
-    } catch (error) {
-      log.error('Failed to parse tool calls:', error);
-    }
-  }
-
-  // Then extract thinking blocks from the remaining content
-  const parts = contentWithoutToolCalls.split(/(<think>.*?<\/think>)/gs);
-  const thinkingBlocks: string[] = [];
-  const regularContent: string[] = [];
-
-  parts.forEach((part) => {
-    if (part.startsWith('<think>') && part.endsWith('</think>')) {
-      const thinkingContent = part.slice(7, -8); // Remove the tags
-      thinkingBlocks.push(thinkingContent);
-    } else {
-      regularContent.push(part);
-    }
-  });
-
-  return {
-    thinkingBlocks,
-    toolCalls,
-    regularContent: regularContent.join(''),
-  };
-};
-
 // Helper function to safely convert content to string
 const safeStringify = (value: any): string => {
   if (typeof value === 'string') return value;
@@ -169,7 +87,7 @@ const safeStringify = (value: any): string => {
   return String(value);
 };
 
-// NEW: Sequential content parsing for inline tool rendering
+// Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
   const contentBlocks: Array<{
     type: 'text' | 'tool_call' | 'thinking';

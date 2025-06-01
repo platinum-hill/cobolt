@@ -350,11 +350,11 @@ class QueryEngine {
   }
 
   /**
-   * Experimental: Single conversation with inline tool calling
+   * Experimental: Sequential conversation with inline tool calling
    * This allows tools to be called dynamically during the conversation
    * based on what the AI learns as it goes
    */
-  async processSingleConversationQuery(
+  async processSequentialConversationQuery(
     requestContext: RequestContext,
     toolCalls: FunctionTool[],
     cancellationToken: CancellationToken = globalCancellationToken
@@ -366,7 +366,7 @@ class QueryEngine {
     // Use chat prompt (not tool planning prompt)
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
-    return this.createSingleConversationGenerator(
+    return this.createSequentialConversationGenerator(
       requestContext, 
       chatSystemPrompt,
       toolCalls, 
@@ -376,9 +376,9 @@ class QueryEngine {
   }
 
   /**
-   * Creates a generator for single conversation with inline tool calling
+   * Creates a generator for sequential conversation with inline tool calling
    */
-  private async *createSingleConversationGenerator(
+  private async *createSequentialConversationGenerator(
     requestContext: RequestContext,
     systemPrompt: string,
     toolCalls: FunctionTool[],
@@ -589,12 +589,12 @@ class QueryEngine {
           { role: 'user', content: requestContext.question },
           { role: 'assistant', content: finalAssistantResponse }
         ]).catch((error) => {
-          console.error('Error adding single conversation to memory:', error);
+          console.error('Error adding response to memory:', error);
         });
       }
       
     } catch (error) {
-      console.error('Error in single conversation generator:', error);
+      console.error('Error in response generator:', error);
       yield `\nError processing response: ${error.message}`;
     }
   }
@@ -663,16 +663,16 @@ class QueryEngine {
 
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'SINGLE_CONVERSATION' = 'CHAT',
+    chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
     
-    if (chatMode === 'SINGLE_CONVERSATION') {
+    if (chatMode === 'CONTEXT_AWARE') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processSingleConversationQuery(requestContext, toolCalls, cancellationToken);
+      return this.processSequentialConversationQuery(requestContext, toolCalls, cancellationToken);
     }
 
     return this.processChatQuery(requestContext, cancellationToken);
@@ -684,7 +684,7 @@ const queryEngineInstance = new QueryEngine();
 // TODO: replace this with actual tests
 if (require.main === module) {
   (async () => {
-    const chatMode = 'SINGLE_CONVERSATION';
+    const chatMode = 'CONTEXT_AWARE';
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory: new ChatHistory(),

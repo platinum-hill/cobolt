@@ -748,23 +748,11 @@
 }
 
 .thinking-header:focus {
-  outline: none;
+  outline: 2px solid rgba(124, 169, 126, 0.4);
+  outline-offset: 2px;
 }
 
-/* Remove focus highlighting from all buttons in chat interface */
-.thinking-header:focus,
-.thinking-header:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-/* Remove any other button focus states */
-button:focus,
-button:focus-visible {
-  outline: none;
-}
-
-/* Specifically target tool call buttons */
+/* Remove Tool call buttons */
 .individual-tool-call button:focus,
 .individual-tool-call button:focus-visible {
   outline: none;

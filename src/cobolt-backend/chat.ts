@@ -10,7 +10,7 @@ async function main() {
     });
   
     console.log("Chat with AI (type 'exit' to quit)");
-    console.log("Available modes: chat, contextaware, single_conversation");
+    console.log("Available modes: chat, contextaware");
     console.log("Usage: /mode <mode> to switch modes (e.g. /mode contextaware)");
   
     const askQuestion = (): Promise<string> => {
@@ -41,7 +41,7 @@ async function main() {
             console.log(`Switched to ${currentMode} mode`);
             continue;
           } else {
-            console.log("Invalid mode. Available modes: chat, contextaware, single_conversation");
+            console.log("Invalid mode. Available modes: chat, contextaware");
             continue;
           }
         }

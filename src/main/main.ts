@@ -410,7 +410,7 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
 
     const stream = await queryEngineInstance.query(
       requestContext,
-      'SINGLE_CONVERSATION',
+      'CONTEXT_AWARE',
       globalCancellationToken,
     );
 
