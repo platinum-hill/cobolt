@@ -135,34 +135,6 @@ class QueryEngine {
       toolCallsMetadata
     );
   }
-
-  /**
-   * Streaming version of processRagRatQuery - streams content and tool execution in real-time
-   */
-  async processRagRatQueryStream(
-    requestContext: RequestContext,
-    toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken = globalCancellationToken
-  ): Promise<AsyncGenerator<string>> {
-    // Perform initial query with tool descriptions
-    const memories = await searchMemories(requestContext.question)
-    if (cancellationToken.isCancelled) {
-      return this.emptyCancelledStream(cancellationToken);
-    }
-    
-    TraceLogger.trace(requestContext, 'processRagRatQueryStream-question', requestContext.question);
-    TraceLogger.trace(requestContext, 'processRagRatQueryStream-memories_retrieved', memories);
-    const toolUseSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString());
-    
-    // Get the streaming response
-    const streamingResponse = queryOllamaWithToolsStream(requestContext, toolUseSystemPrompt, toolCalls, memories);
-    
-    if (cancellationToken.isCancelled) {
-      return this.emptyCancelledStream(cancellationToken);
-    }
-    
-    return this.createToolStreamingGenerator(requestContext, streamingResponse, toolCalls, memories, cancellationToken);
-  }
   
   /**
    * Create a generator that processes the streaming response and executes tools in real-time
@@ -342,7 +314,7 @@ class QueryEngine {
       
       // Fallback if no content and no tools
       if (!hasContent && detectedToolCalls.length === 0) {
-        TraceLogger.trace(requestContext, 'processRagRatQueryStream', 'no content or tools, falling back to simple chat');
+        TraceLogger.trace(requestContext, 'simpleChatOllamaStream', 'no content or tools, falling back to simple chat');
         const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
         const fallbackStream = simpleChatOllamaStream(requestContext, chatSystemPrompt, memories);
         
@@ -691,22 +663,12 @@ class QueryEngine {
 
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONTEXT_AWARE_STREAM' | 'SINGLE_CONVERSATION' = 'CHAT',
+    chatMode: 'CHAT' | 'SINGLE_CONVERSATION' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
-
-    if (chatMode === 'CONTEXT_AWARE') {
-      const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processRagRatQueryStream(requestContext, toolCalls, cancellationToken);
-    }
-    
-    if (chatMode === 'CONTEXT_AWARE_STREAM') {
-      const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processRagRatQueryStream(requestContext, toolCalls, cancellationToken);
-    }
     
     if (chatMode === 'SINGLE_CONVERSATION') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
@@ -722,7 +684,7 @@ const queryEngineInstance = new QueryEngine();
 // TODO: replace this with actual tests
 if (require.main === module) {
   (async () => {
-    const chatMode = 'CONTEXT_AWARE';
+    const chatMode = 'SINGLE_CONVERSATION';
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory: new ChatHistory(),
