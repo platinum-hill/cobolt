@@ -40,7 +40,7 @@ class QueryEngine {
               detectedToolCalls.push(...newToolCalls);
               
               // Show "Executing..." status immediately using UPDATE format
-              const executingToolCalls = newToolCalls.map((toolCall: ToolCall) => ({
+              const executingToolCalls = newToolCalls.map((toolCall: any) => ({
                 name: toolCall.function.name,
                 arguments: JSON.stringify(toolCall.function.arguments, null, 2),
                 result: 'Executing...',
