@@ -1,6 +1,6 @@
 import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
-import { queryOllamaWithTools, queryOllamaWithToolsStream, simpleChatOllamaStream, getOllamaClient } from './ollama_client';
+import { queryOllamaWithTools, simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
 import { searchMemories, addToMemory } from './memory';

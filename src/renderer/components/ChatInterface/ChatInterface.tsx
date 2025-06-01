@@ -29,7 +29,7 @@ class MessageErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Message rendering error:', error, errorInfo);
+    log.error('Message rendering error:', error, errorInfo);
   }
 
   render() {
@@ -103,33 +103,7 @@ const processMessageContentOLD = (content: string) => {
       log.error('Failed to parse tool call updates:', error);
     }
   }
-  
-  // Extract real-time tool completions SECOND
-  const toolCompleteMatches = content.matchAll(/<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs);
-  for (const match of toolCompleteMatches) {
-    try {
-      const completedToolCalls = JSON.parse(match[1]);
-      // Update existing tool calls with completion data
-      completedToolCalls.forEach((completedTool: any) => {
-        const existingIndex = toolCalls.findIndex(tool => tool.name === completedTool.name && 
-          tool.arguments === completedTool.arguments);
-        if (existingIndex >= 0) {
-          toolCalls[existingIndex] = { ...toolCalls[existingIndex], ...completedTool, isExecuting: false };
-        } else {
-          toolCalls.push({ ...completedTool, isExecuting: false });
-        }
-      });
-      
-      // Remove complete tags from content
-      contentWithoutToolCalls = contentWithoutToolCalls.replace(
-        /<tool_calls_complete>.*?<\/tool_calls_complete>/s,
-        '',
-      );
-    } catch (error) {
-      log.error('Failed to parse tool call completions:', error);
-    }
-  }
-  
+
   // Extract final tool calls LAST (preserve execution status from above)
   const toolCallMatch = content.match(/<tool_calls>(.*?)<\/tool_calls>/s);
   if (toolCallMatch) {
@@ -218,7 +192,7 @@ const processMessageContent = (content: string) => {
         toolCallsMap.set(key, updateTool);
       });
     } catch (error) {
-      console.error('Failed to parse tool call updates:', error);
+      log.error('Failed to parse tool call updates:', error);
     }
   }
   
@@ -237,7 +211,7 @@ const processMessageContent = (content: string) => {
         });
       });
     } catch (error) {
-      console.error('Failed to parse tool call completions:', error);
+      log.error('Failed to parse tool call completions:', error);
     }
   }
   
@@ -255,7 +229,7 @@ const processMessageContent = (content: string) => {
         });
       });
     } catch (error) {
-      console.error('Failed to parse final tool calls:', error);
+      log.error('Failed to parse final tool calls:', error);
     }
   }
   
@@ -583,7 +557,7 @@ function ChatInterface({
                             </div>
                           );
                         } catch (error) {
-                          console.error('Error rendering text block:', error);
+                          log.error('Error rendering text block:', error);
                           return (
                             <div key={block.id || blockIndex} className="text-block error">
                               <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>
@@ -678,7 +652,7 @@ function ChatInterface({
                             </div>
                           );
                         } catch (error) {
-                          console.error('Error rendering thinking block:', error);
+                          log.error('Error rendering thinking block:', error);
                           return (
                             <div key={block.id || blockIndex} className="thinking-section error">
                               <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>

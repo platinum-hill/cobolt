@@ -464,68 +464,6 @@ async function* simpleChatOllamaStream(requestContext: RequestContext,
   });
 }
 
-/**
- * Send a simple query to ollama with the specified tools.
- * @param messages - a slice of messages objects
- * @param toolCalls - the list of FunctionTools to pass with the query
- * @returns - The response from the LLM
- */
-async function* queryOllamaWithToolsStream(requestContext: RequestContext,
-  systemPrompt: string,
-  toolCalls: FunctionTool[],
-  memories: string = ''): AsyncGenerator<string> {
-  
-  const messages: Message[] = [
-    { role: 'system', content: systemPrompt },
-  ];
-  
-  if (memories) {
-    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
-  }
-  
-  if (requestContext.chatHistory.length > 0) {
-    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
-      messages.push(message);
-    });
-  }
-  messages.push({ role: 'user', content: requestContext.question });
-  
-  const response = await ollama.chat({
-    model: MODELS.TOOLS_MODEL,
-    keep_alive: -1,
-    messages: messages,
-    tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-    options: {
-      temperature: defaultTemperature,
-      top_k: defaultTopK,
-      top_p: defaultTopP,
-      num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
-    },
-    stream: true,
-  });
-  
-  let detectedToolCalls: any[] = [];
-  
-  for await (const part of response) {
-    // Stream content immediately
-    if (part.message.content) {
-      yield part.message.content;
-    }
-    
-    // When tool calls are detected, yield them as XML for frontend parsing
-    if (part.message.tool_calls && part.message.tool_calls.length > 0) {
-      detectedToolCalls.push(...part.message.tool_calls);
-      // Yield tool calls immediately when detected
-      yield `<tool_calls_detected>${JSON.stringify(part.message.tool_calls)}</tool_calls_detected>`;
-    }
-  }
-  
-  // If we have tool calls, yield the complete set at the end for processing
-  if (detectedToolCalls.length > 0) {
-    yield `<tool_calls_complete>${JSON.stringify(detectedToolCalls)}</tool_calls_complete>`;
-  }
-}
-
 // Keep original function for backward compatibility during transition
 async function queryOllamaWithTools(requestContext: RequestContext,
   systemPrompt: string,
@@ -623,4 +561,4 @@ if (require.main === module) {
   })();
 }
 
-export { initOllama, getOllamaClient, queryOllamaWithTools, queryOllamaWithToolsStream, simpleChatOllamaStream, stopOllama, setProgressWindow };
+export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
