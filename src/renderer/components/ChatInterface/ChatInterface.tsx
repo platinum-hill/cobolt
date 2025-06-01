@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, Component, ErrorInfo, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Clipboard } from 'lucide-react';
@@ -8,6 +8,65 @@ import log from 'electron-log/renderer';
 import useMessages from '../../hooks/useMessages';
 import useScrollToBottom from '../../hooks/useScrollToBottom';
 import './ChatInterface.css';
+
+// Error Boundary Component to catch React crashes
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+class MessageErrorBoundary extends Component<
+  { children: ReactNode; messageId: string },
+  ErrorBoundaryState
+> {
+  constructor(props: { children: ReactNode; messageId: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Message rendering error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="message-error" style={{
+          background: '#2a1a1a',
+          border: '1px solid #ff6b6b',
+          borderRadius: '8px',
+          padding: '12px',
+          margin: '8px 0'
+        }}>
+          <h4 style={{ color: '#ff6b6b', margin: '0 0 8px 0' }}>Message Rendering Error</h4>
+          <p style={{ color: '#cccccc', fontSize: '14px', margin: '0 0 12px 0' }}>
+            This message contains corrupted content and cannot be displayed.
+          </p>
+          <button 
+            onClick={() => this.setState({ hasError: false })}
+            style={{
+              background: '#ff6b6b',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px'
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 interface ChatInterfaceProps {
   isLoading: boolean;
@@ -122,6 +181,20 @@ const processMessageContentOLD = (content: string) => {
   };
 };
 
+// Helper function to safely convert content to string
+const safeStringify = (value: any): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[Object]';
+    }
+  }
+  return String(value);
+};
+
 // NEW: Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
   const contentBlocks: Array<{
@@ -227,10 +300,10 @@ const processMessageContent = (content: string) => {
             });
           }
         } else if (subPart.trim()) {
-          // This is regular text content
+          // This is regular text content - ensure it's a string
           contentBlocks.push({
             type: 'text',
-            content: subPart,
+            content: safeStringify(subPart),
             id: `text-${index}-${subIndex}`
           });
         }
@@ -257,10 +330,10 @@ const processMessageContent = (content: string) => {
       toolCalls: Array.from(toolCallsMap.values()),
       thinkingBlocks: contentBlocks
         .filter(block => block.type === 'thinking')
-        .map(block => block.thinkingContent || ''),
+        .map(block => safeStringify(block.thinkingContent || '')),
       regularContent: contentBlocks
         .filter(block => block.type === 'text')
-        .map(block => block.content || '')
+        .map(block => safeStringify(block.content || ''))
         .join('')
     };
   }
@@ -271,10 +344,10 @@ const processMessageContent = (content: string) => {
     toolCalls: Array.from(toolCallsMap.values()),
     thinkingBlocks: contentBlocks
       .filter(block => block.type === 'thinking')
-      .map(block => block.thinkingContent || ''),
+      .map(block => safeStringify(block.thinkingContent || '')),
     regularContent: contentBlocks
       .filter(block => block.type === 'text')
-      .map(block => block.content || '')
+      .map(block => safeStringify(block.content || ''))
       .join('')
   };
 };
@@ -489,23 +562,36 @@ function ChatInterface({
           const hasContentBlocks = contentBlocks && contentBlocks.length > 0;
 
           return (
-            <div
-              key={message.id}
-              className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
-            >
+            <MessageErrorBoundary key={message.id} messageId={message.id}>
+              <div
+                className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
+              >
               {message.sender === 'assistant' ? (
                 <div className="assistant-message-content">
                   {hasContentBlocks ? (
                     // NEW: Sequential rendering of content blocks
                     contentBlocks.map((block, blockIndex) => {
                       if (block.type === 'text') {
-                        return (
-                          <div key={block.id || blockIndex} className="text-block">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {block.content || ''}
-                            </ReactMarkdown>
-                          </div>
-                        );
+                        try {
+                          // Ensure content is a string before rendering
+                          const safeContent = safeStringify(block.content || '');
+                          return (
+                            <div key={block.id || blockIndex} className="text-block">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {safeContent}
+                              </ReactMarkdown>
+                            </div>
+                          );
+                        } catch (error) {
+                          console.error('Error rendering text block:', error);
+                          return (
+                            <div key={block.id || blockIndex} className="text-block error">
+                              <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>
+                                [Error rendering content - content may be corrupted]
+                              </p>
+                            </div>
+                          );
+                        }
                       } 
                       
                       if (block.type === 'tool_call' && block.toolCall) {
@@ -550,7 +636,7 @@ function ChatInterface({
                                 <div className="tool-call-args">
                                   <div className="section-label">Arguments:</div>
                                   <pre className="code-block">
-                                    {block.toolCall.arguments}
+                                    {safeStringify(block.toolCall.arguments)}
                                   </pre>
                                 </div>
                                 <div className="tool-call-result">
@@ -558,7 +644,7 @@ function ChatInterface({
                                   <div
                                     className={`result-content ${block.toolCall.isError ? 'error' : ''}`}
                                   >
-                                    {block.toolCall.result}
+                                    {safeStringify(block.toolCall.result)}
                                   </div>
                                 </div>
                               </div>
@@ -568,26 +654,39 @@ function ChatInterface({
                       }
                       
                       if (block.type === 'thinking') {
-                        return (
-                          <div key={block.id || blockIndex} className="thinking-section" style={{marginBottom: '12px'}}>
-                            <button
-                              type="button"
-                              className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                              onClick={() => toggleThinking(message.id)}
-                              aria-expanded={!collapsedThinking[message.id]}
-                              aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
-                            >
-                              <div className="header-content">Reasoning</div>
-                            </button>
-                            <div
-                              className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                            >
-                              <div className="thinking-block">
-                                {block.thinkingContent}
+                        try {
+                          // Ensure thinking content is a string before rendering
+                          const safeThinkingContent = safeStringify(block.thinkingContent || '');
+                          return (
+                            <div key={block.id || blockIndex} className="thinking-section" style={{marginBottom: '12px'}}>
+                              <button
+                                type="button"
+                                className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                                onClick={() => toggleThinking(message.id)}
+                                aria-expanded={!collapsedThinking[message.id]}
+                                aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
+                              >
+                                <div className="header-content">Reasoning</div>
+                              </button>
+                              <div
+                                className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                              >
+                                <div className="thinking-block">
+                                  {safeThinkingContent}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
+                          );
+                        } catch (error) {
+                          console.error('Error rendering thinking block:', error);
+                          return (
+                            <div key={block.id || blockIndex} className="thinking-section error">
+                              <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>
+                                [Error rendering thinking content]
+                              </p>
+                            </div>
+                          );
+                        }
                       }
                       
                       return null;
@@ -633,7 +732,7 @@ function ChatInterface({
                                 <div className="tool-call-args">
                                   <div className="section-label">Arguments:</div>
                                   <pre className="code-block">
-                                    {toolCall.arguments}
+                                    {safeStringify(toolCall.arguments)}
                                   </pre>
                                 </div>
                                 <div className="tool-call-result">
@@ -641,7 +740,7 @@ function ChatInterface({
                                   <div
                                     className={`result-content ${toolCall.isError ? 'error' : ''}`}
                                   >
-                                    {toolCall.result}
+                                    {safeStringify(toolCall.result)}
                                   </div>
                                 </div>
                               </div>
@@ -697,7 +796,8 @@ function ChatInterface({
               ) : (
                 message.content
               )}
-            </div>
+              </div>
+            </MessageErrorBoundary>
           );
         })}
         <div ref={messagesEndRef} />

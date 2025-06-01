@@ -3,7 +3,7 @@ import { formatDateTime } from './datetime_parser';
 import { queryOllamaWithTools, queryOllamaWithToolsStream, simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
-import { searchMemories } from './memory';
+import { searchMemories, addToMemory } from './memory';
 import { FunctionTool } from './ollama_tools';
 import { Message } from 'ollama';
 import  { ChatHistory } from './chat_history';
@@ -500,6 +500,10 @@ class QueryEngine {
           tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
         });
         
+        // Log what the AI said in this round
+        TraceLogger.trace(requestContext, 'single-conversation-assistant-content', `AI said: ${assistantContent}`);
+        TraceLogger.trace(requestContext, 'single-conversation-detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
+        
         // If no tool calls, conversation is complete
         if (detectedToolCalls.length === 0) {
           conversationComplete = true;
@@ -598,6 +602,23 @@ class QueryEngine {
         
         // Continue conversation with tool results
         // The loop will start another round with the updated conversation
+      }
+      
+      // Save final conversation to memory when complete
+      if (conversationComplete && conversationMessages.length > 0) {
+        const assistantMessages = conversationMessages.filter(msg => msg.role === 'assistant');
+        const finalAssistantResponse = assistantMessages.map(msg => msg.content || '').join(' ');
+        
+        // Log the final assistant response
+        TraceLogger.trace(requestContext, 'single-conversation-final-response', `Final response: ${finalAssistantResponse}`);
+        
+        // Save to memory in background
+        addToMemory([
+          { role: 'user', content: requestContext.question },
+          { role: 'assistant', content: finalAssistantResponse }
+        ]).catch((error) => {
+          console.error('Error adding single conversation to memory:', error);
+        });
       }
       
     } catch (error) {
@@ -701,12 +722,13 @@ const queryEngineInstance = new QueryEngine();
 // TODO: replace this with actual tests
 if (require.main === module) {
   (async () => {
-    const chatMode = 'CONTEXT_AWARE';
+    console.log('Testing Single Conversation Mode...');
+    const chatMode = 'SINGLE_CONVERSATION';
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory: new ChatHistory(),
-      question: 'Why is the sky blue?',
-      requestId: "test-request-id",
+      question: 'Check the weather in London, then guess a colder city and check that too',
+      requestId: "test-single-conversation",
     };
     const stream = await queryEngineInstance.query(requestContext, chatMode);
     if (!stream) {
@@ -723,6 +745,8 @@ if (require.main === module) {
       } else {
         output += chunk;
       }
+      // Log streaming chunks for debugging
+      console.log('CHUNK:', chunk);
     }
     TraceLogger.trace(requestContext, 'response_to_user_complete', output);
   })();
