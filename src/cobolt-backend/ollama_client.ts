@@ -464,64 +464,6 @@ async function* simpleChatOllamaStream(requestContext: RequestContext,
   });
 }
 
-// Keep original function for future reference
-/*
-async function queryOllamaWithTools(requestContext: RequestContext,
-  systemPrompt: string,
-  toolCalls: FunctionTool[],
-  memories: string = ''): Promise<ChatResponse> {
-  
-  const messages: Message[] = [
-    { role: 'system', content: systemPrompt },
-  ];
-  
-  if (memories) {
-    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
-  }
-  
-  if (requestContext.chatHistory.length > 0) {
-    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
-      messages.push(message);
-    });
-  }
-  messages.push({ role: 'user', content: requestContext.question });
-  
-  const response = await ollama.chat({
-    model: MODELS.TOOLS_MODEL,
-    keep_alive: -1,
-    messages: messages,
-    tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-    options: {
-      temperature: defaultTemperature,
-      top_k: defaultTopK,
-      top_p: defaultTopP,
-      num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
-    },
-    stream: true,
-  });
-  
-  let content = '';
-  let tool_calls: any[] = [];
-  
-  for await (const part of response) {
-    if (part.message.tool_calls && part.message.tool_calls.length > 0) {
-      tool_calls.push(...part.message.tool_calls);
-    }
-    if (part.message.content) {
-      content += part.message.content;
-    }
-  }
-  
-  return {
-    message: {
-      role: 'assistant',
-      content: content,
-      tool_calls: tool_calls.length > 0 ? tool_calls : undefined
-    }
-  } as ChatResponse;
-}
-*/
-
 const getOllamaClient = (): Ollama => {
   return ollama
 }
@@ -540,29 +482,4 @@ function logExecOutput(platform: string) {
   };
 }
 
-/* Not sure what this is maybe a test
-// Commentted out because queryOllamaWithTools() is changing
-if (require.main === module) {
-  (async () => {
-    await initOllama();
-    const toolCalls: FunctionTool[] = [];
-    const requestContext = {
-      requestId: '123',
-      currentDatetime: new Date(),
-      question: 'Give me all of my calender events since last week from friends',
-      chatHistory: new ChatHistory(),
-    };
-    const toolUserMessage = createQueryWithToolsPrompt(formatDateTime(new Date()).toString())
-    const response = await queryOllamaWithTools(requestContext, toolUserMessage, toolCalls);
-    console.log(response)
-    if (!response.message.tool_calls) {
-      console.log('No tool calls');
-      return;
-    }
-    for (const toolCall of response.message.tool_calls) {
-      console.log('Tool call:', toolCall);
-    }
-  })();
-}
-*/
 export { initOllama, getOllamaClient, simpleChatOllamaStream, stopOllama, setProgressWindow };
