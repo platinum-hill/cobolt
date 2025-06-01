@@ -40,7 +40,7 @@ class QueryEngine {
               detectedToolCalls.push(...newToolCalls);
               
               // Show "Executing..." status immediately using UPDATE format
-              const executingToolCalls = newToolCalls.map(toolCall => ({
+              const executingToolCalls = newToolCalls.map((toolCall: ToolCall) => ({
                 name: toolCall.function.name,
                 arguments: JSON.stringify(toolCall.function.arguments, null, 2),
                 result: 'Executing...',
@@ -203,7 +203,8 @@ class QueryEngine {
       
     } catch (error) {
       console.error('Error in tool streaming generator:', error);
-      yield `\nError processing response: ${error.message}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      yield `\nError processing response: ${errorMessage}`;
     }
   }
   
@@ -469,7 +470,8 @@ class QueryEngine {
       
     } catch (error) {
       console.error('Error in response generator:', error);
-      yield `\nError processing response: ${error.message}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      yield `\nError processing response: ${errorMessage}`;
     }
   }
 
