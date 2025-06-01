@@ -21,7 +21,7 @@ async function main() {
       });
     };
 
-    let currentMode: 'CHAT' | 'SINGLE_CONVERSATION' = 'CHAT';
+    let currentMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT';
     const chatHistory = new ChatHistory();
   
     try {
@@ -36,8 +36,8 @@ async function main() {
 
         if (userInput.startsWith('/mode ')) {
           const mode = userInput.slice(6).toUpperCase();
-          if (['CHAT', 'SINGLE_CONVERSATION'].includes(mode)) {
-            currentMode = mode as 'CHAT' | 'SINGLE_CONVERSATION';
+          if (['CHAT', 'CONTEXT_AWARE'].includes(mode)) {
+            currentMode = mode as 'CHAT' | 'CONTEXT_AWARE';
             console.log(`Switched to ${currentMode} mode`);
             continue;
           } else {
