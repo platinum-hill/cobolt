@@ -186,78 +186,79 @@ const processMessageContent = (content: string) => {
     }
   }
   
-  // Remove all tool call tags to get clean content
-  let cleanContent = content
-    .replace(/<tool_calls_update>.*?<\/tool_calls_update>/gs, '')
-    .replace(/<tool_calls_complete>.*?<\/tool_calls_complete>/gs, '')
-    .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
+  // Parse content using position markers for true inline tool calls
+  // Split by position markers to get exact tool call locations
+  const parts = content.split(/(<tool_call_position id="[^"]*">)/g);
   
-  // Now parse sequentially through the clean content
-  // Split by thinking tags first to preserve order
-  const parts = cleanContent.split(/(<think>.*?<\/think>)/gs);
+  let currentToolCallIndex = 0;
+  const toolCallsArray = Array.from(toolCallsMap.values());
   
   parts.forEach((part, index) => {
-    if (part.startsWith('<think>') && part.endsWith('</think>')) {
-      // This is a thinking block
-      const thinkingContent = part.slice(7, -8); // Remove tags
-      contentBlocks.push({
-        type: 'thinking',
-        thinkingContent,
-        id: `thinking-${index}`
-      });
-    } else if (part.trim()) {
-      // This is regular text content
-      contentBlocks.push({
-        type: 'text',
-        content: part,
-        id: `text-${index}`
+    if (part.startsWith('<tool_call_position')) {
+      // Insert tool call at this exact position
+      if (currentToolCallIndex < toolCallsArray.length) {
+        const toolCall = toolCallsArray[currentToolCallIndex];
+        contentBlocks.push({
+          type: 'tool_call',
+          toolCall,
+          id: `tool-${currentToolCallIndex}`
+        });
+        currentToolCallIndex++;
+      }
+    } else {
+      // Clean content by removing tool call tags
+      let cleanPart = part
+        .replace(/<tool_calls_update>.*?<\/tool_calls_update>/gs, '')
+        .replace(/<tool_calls_complete>.*?<\/tool_calls_complete>/gs, '')
+        .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
+      
+      // Split by thinking tags to preserve order
+      const subParts = cleanPart.split(/(<think>.*?<\/think>)/gs);
+      
+      subParts.forEach((subPart, subIndex) => {
+        if (subPart.startsWith('<think>') && subPart.endsWith('</think>')) {
+          // This is a thinking block
+          const thinkingContent = subPart.slice(7, -8); // Remove tags
+          if (thinkingContent.trim()) {
+            contentBlocks.push({
+              type: 'thinking',
+              thinkingContent,
+              id: `thinking-${index}-${subIndex}`
+            });
+          }
+        } else if (subPart.trim()) {
+          // This is regular text content
+          contentBlocks.push({
+            type: 'text',
+            content: subPart,
+            id: `text-${index}-${subIndex}`
+          });
+        }
       });
     }
   });
   
-  // Add tool calls inline where they logically fit
-  // For now, distribute them evenly through the content
-  // TODO: Use actual positioning from backend stream
-  const toolCallsArray = Array.from(toolCallsMap.values());
-  const textBlocks = contentBlocks.filter(block => block.type === 'text');
+  // Add any remaining tool calls at the end (fallback for tools without position markers)
+  while (currentToolCallIndex < toolCallsArray.length) {
+    const toolCall = toolCallsArray[currentToolCallIndex];
+    contentBlocks.push({
+      type: 'tool_call',
+      toolCall,
+      id: `tool-remaining-${currentToolCallIndex}`
+    });
+    currentToolCallIndex++;
+  }
   
-  if (toolCallsArray.length > 0 && textBlocks.length > 0) {
-    // Insert tool calls between text blocks
-    const newContentBlocks: typeof contentBlocks = [];
-    
-    contentBlocks.forEach((block, index) => {
-      newContentBlocks.push(block);
-      
-      // Insert tool calls after text blocks
-      if (block.type === 'text' && toolCallsArray.length > 0) {
-        const toolCall = toolCallsArray.shift();
-        if (toolCall) {
-          newContentBlocks.push({
-            type: 'tool_call',
-            toolCall,
-            id: `tool-${toolCall.name}-${index}`
-          });
-        }
-      }
-    });
-    
-    // Add any remaining tool calls at the end
-    toolCallsArray.forEach((toolCall, index) => {
-      newContentBlocks.push({
-        type: 'tool_call',
-        toolCall,
-        id: `tool-remaining-${index}`
-      });
-    });
-    
+  // Return properly ordered content blocks
+  if (contentBlocks.length > 0) {
     return {
-      contentBlocks: newContentBlocks,
+      contentBlocks,
       // Legacy compatibility
       toolCalls: Array.from(toolCallsMap.values()),
-      thinkingBlocks: newContentBlocks
+      thinkingBlocks: contentBlocks
         .filter(block => block.type === 'thinking')
         .map(block => block.thinkingContent || ''),
-      regularContent: newContentBlocks
+      regularContent: contentBlocks
         .filter(block => block.type === 'text')
         .map(block => block.content || '')
         .join('')

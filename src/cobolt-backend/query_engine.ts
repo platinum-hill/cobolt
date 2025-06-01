@@ -478,6 +478,9 @@ class QueryEngine {
           if (part.message.tool_calls && part.message.tool_calls.length > 0) {
             detectedToolCalls.push(...part.message.tool_calls);
             
+            // Emit position marker for inline rendering
+            yield `<tool_call_position id="tool-${detectedToolCalls.length - part.message.tool_calls.length}">`;
+            
             // Send real-time tool update
             const executingToolCalls = part.message.tool_calls.map(toolCall => ({
               name: toolCall.function.name,
@@ -698,13 +701,12 @@ const queryEngineInstance = new QueryEngine();
 // TODO: replace this with actual tests
 if (require.main === module) {
   (async () => {
-    console.log('Testing Single Conversation Mode...');
-    const chatMode = 'SINGLE_CONVERSATION';
+    const chatMode = 'CONTEXT_AWARE';
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory: new ChatHistory(),
-      question: 'Check the weather in London, then guess a colder city and check that too',
-      requestId: "test-single-conversation",
+      question: 'Why is the sky blue?',
+      requestId: "test-request-id",
     };
     const stream = await queryEngineInstance.query(requestContext, chatMode);
     if (!stream) {
@@ -721,8 +723,6 @@ if (require.main === module) {
       } else {
         output += chunk;
       }
-      // Log streaming chunks for debugging
-      console.log('CHUNK:', chunk);
     }
     TraceLogger.trace(requestContext, 'response_to_user_complete', output);
   })();
