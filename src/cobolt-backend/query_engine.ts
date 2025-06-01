@@ -1,6 +1,7 @@
 import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
-import { queryOllamaWithTools, queryOllamaWithToolsStream, simpleChatOllamaStream } from './ollama_client';
+import { queryOllamaWithTools, queryOllamaWithToolsStream, simpleChatOllamaStream, getOllamaClient } from './ollama_client';
+import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
 import { searchMemories } from './memory';
 import { FunctionTool } from './ollama_tools';
@@ -377,6 +378,232 @@ class QueryEngine {
   }
 
   /**
+   * Experimental: Single conversation with inline tool calling
+   * This allows tools to be called dynamically during the conversation
+   * based on what the AI learns as it goes
+   */
+  async processSingleConversationQuery(
+    requestContext: RequestContext,
+    toolCalls: FunctionTool[],
+    cancellationToken: CancellationToken = globalCancellationToken
+  ): Promise<AsyncGenerator<string>> {
+    // Get RAG memories like before
+    const memories = await searchMemories(requestContext.question);
+    TraceLogger.trace(requestContext, 'single-conversation-memories', memories);
+    
+    // Use chat prompt (not tool planning prompt)
+    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
+    
+    return this.createSingleConversationGenerator(
+      requestContext, 
+      chatSystemPrompt,
+      toolCalls, 
+      memories, 
+      cancellationToken
+    );
+  }
+
+  /**
+   * Creates a generator for single conversation with inline tool calling
+   */
+  private async *createSingleConversationGenerator(
+    requestContext: RequestContext,
+    systemPrompt: string,
+    toolCalls: FunctionTool[],
+    memories: string,
+    cancellationToken: CancellationToken
+  ): AsyncGenerator<string> {
+    
+    // Build conversation messages
+    const messages: Message[] = [
+      { role: 'system', content: systemPrompt },
+    ];
+    
+    if (memories) {
+      messages.push({ role: 'tool', content: 'User Memories: ' + memories });
+    }
+    
+    if (requestContext.chatHistory.length > 0) {
+      requestContext.chatHistory.toOllamaMessages().forEach((message) => {
+        messages.push(message);
+      });
+    }
+    
+    messages.push({ role: 'user', content: requestContext.question });
+    
+    try {
+      let conversationMessages = [...messages];
+      let conversationComplete = false;
+      
+      while (!conversationComplete && !cancellationToken.isCancelled) {
+        TraceLogger.trace(requestContext, 'single-conversation-round', `Starting conversation round with ${conversationMessages.length} messages`);
+        
+        // Get ollama client and constants
+        const ollama = getOllamaClient();
+        const defaultTemperature = 1.0;
+        const defaultTopK = 64;
+        const defaultTopP = 0.95;
+        
+        // Start conversation with tools enabled
+        const response = await ollama.chat({
+          model: MODELS.CHAT_MODEL, // Use chat model, not tools model
+          messages: conversationMessages,
+          tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
+          keep_alive: -1,
+          options: {
+            temperature: defaultTemperature,
+            top_k: defaultTopK,
+            top_p: defaultTopP,
+            num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
+          },
+          stream: true,
+        });
+        
+        let assistantContent = '';
+        let detectedToolCalls: any[] = [];
+        
+        // Stream response and collect tool calls
+        for await (const part of response) {
+          if (cancellationToken.isCancelled) {
+            return;
+          }
+          
+          // Stream content immediately
+          if (part.message.content) {
+            assistantContent += part.message.content;
+            yield part.message.content;
+          }
+          
+          // Collect tool calls
+          if (part.message.tool_calls && part.message.tool_calls.length > 0) {
+            detectedToolCalls.push(...part.message.tool_calls);
+            
+            // Send real-time tool update
+            const executingToolCalls = part.message.tool_calls.map(toolCall => ({
+              name: toolCall.function.name,
+              arguments: JSON.stringify(toolCall.function.arguments, null, 2),
+              result: 'Executing...',
+              isExecuting: true
+            }));
+            
+            yield `<tool_calls_update>${JSON.stringify(executingToolCalls)}</tool_calls_update>`;
+          }
+        }
+        
+        // Add assistant message to conversation
+        conversationMessages.push({
+          role: 'assistant',
+          content: assistantContent,
+          tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
+        });
+        
+        // If no tool calls, conversation is complete
+        if (detectedToolCalls.length === 0) {
+          conversationComplete = true;
+          break;
+        }
+        
+        // Execute tools and add results to conversation
+        for (const toolCall of detectedToolCalls) {
+          if (cancellationToken.isCancelled) {
+            break;
+          }
+          
+          const toolName = toolCall.function.name;
+          const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+          
+          TraceLogger.trace(requestContext, 'single-conversation-tool-start', `Executing ${toolName}`);
+          TraceLogger.trace(requestContext, 'single-conversation-tool-args', `Tool arguments: ${toolArguments}`);
+          TraceLogger.trace(requestContext, 'single-conversation-mcp-request', `MCP Request: ${JSON.stringify(toolCall, null, 2)}`);
+          
+          const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
+          
+          if (!tool || tool.type !== "mcp") {
+            const errorMessage = `Tool '${toolName}' not found`;
+            
+            // Add error to conversation
+            conversationMessages.push({
+              role: 'tool',
+              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
+            });
+            
+            // Send completion event
+            const toolCallInfo = {
+              name: toolName,
+              arguments: toolArguments,
+              result: errorMessage,
+              isError: true
+            };
+            
+            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+            continue;
+          }
+          
+          try {
+            const toolResponse = await tool.mcpFunction(requestContext, toolCall);
+            TraceLogger.trace(requestContext, 'single-conversation-tool-success', `Tool ${toolName} completed`);
+            TraceLogger.trace(requestContext, 'single-conversation-mcp-response', `MCP Response: ${JSON.stringify(toolResponse, null, 2)}`);
+            
+            let resultText = '';
+            if (toolResponse.isError) {
+              resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
+            } else if (!toolResponse.content || toolResponse.content.length === 0) {
+              resultText = 'Tool executed successfully (no content returned)';
+            } else {
+              resultText = toolResponse.content.map(item => 
+                item.type === "text" ? item.text as string : JSON.stringify(item)
+              ).join('');
+            }
+            
+            // Add tool result to conversation for AI context
+            conversationMessages.push({
+              role: 'tool',
+              content: createQueryWithToolResponsePrompt(toolName, resultText)
+            });
+            
+            // Send completion event
+            const toolCallInfo = {
+              name: toolName,
+              arguments: toolArguments,
+              result: resultText,
+              isError: toolResponse.isError
+            };
+            
+            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+            
+          } catch (error: any) {
+            const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
+            TraceLogger.trace(requestContext, 'single-conversation-tool-error', errorMessage);
+            
+            // Add error to conversation
+            conversationMessages.push({
+              role: 'tool',
+              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
+            });
+            
+            // Send completion event
+            const toolCallInfo = {
+              name: toolName,
+              arguments: toolArguments,
+              result: errorMessage,
+              isError: true
+            };
+            
+            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+          }
+        }
+        
+        // Continue conversation with tool results
+        // The loop will start another round with the updated conversation
+      }
+      
+    } catch (error) {
+      console.error('Error in single conversation generator:', error);
+      yield `\nError processing response: ${error.message}`;
+    }
+  }
+
+  /**
    * Wrap a stream generator with cancellation check
    */
   private async *wrappedStream(
@@ -440,7 +667,7 @@ class QueryEngine {
 
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONTEXT_AWARE_STREAM' = 'CHAT',
+    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONTEXT_AWARE_STREAM' | 'SINGLE_CONVERSATION' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
@@ -456,6 +683,11 @@ class QueryEngine {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
       return this.processRagRatQueryStream(requestContext, toolCalls, cancellationToken);
     }
+    
+    if (chatMode === 'SINGLE_CONVERSATION') {
+      const toolCalls: FunctionTool[] = McpClient.toolCache;
+      return this.processSingleConversationQuery(requestContext, toolCalls, cancellationToken);
+    }
 
     return this.processChatQuery(requestContext, cancellationToken);
   }
@@ -466,12 +698,13 @@ const queryEngineInstance = new QueryEngine();
 // TODO: replace this with actual tests
 if (require.main === module) {
   (async () => {
-    const chatMode = 'CONTEXT_AWARE';
+    console.log('Testing Single Conversation Mode...');
+    const chatMode = 'SINGLE_CONVERSATION';
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory: new ChatHistory(),
-      question: 'Why is the sky blue?',
-      requestId: "test-request-id",
+      question: 'Check the weather in London, then guess a colder city and check that too',
+      requestId: "test-single-conversation",
     };
     const stream = await queryEngineInstance.query(requestContext, chatMode);
     if (!stream) {
@@ -488,6 +721,8 @@ if (require.main === module) {
       } else {
         output += chunk;
       }
+      // Log streaming chunks for debugging
+      console.log('CHUNK:', chunk);
     }
     TraceLogger.trace(requestContext, 'response_to_user_complete', output);
   })();
