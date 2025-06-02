@@ -426,10 +426,11 @@ function ChatInterface({
         // Auto-open thinking dropdowns when thinking blocks are detected
         const thinkingBlocks = contentBlocks.filter(block => block.type === 'thinking');
         thinkingBlocks.forEach(block => {
-          if (block.id && collapsedThinking[block.id] === undefined) {
+          const blockId = block.id;
+          if (blockId && collapsedThinking[blockId] === undefined) {
             setCollapsedThinking((prev) => ({
               ...prev,
-              [block.id]: false, // false = open
+              [blockId]: false, // false = open
             }));
           }
         });
@@ -465,7 +466,7 @@ function ChatInterface({
         
         if (events.length > 0) {
           setExecutionState(prev => {
-            const messageState = { ...prev[message.id] } || {};
+            const messageState = prev[message.id] ? { ...prev[message.id] } : {};
             
             events.forEach(event => {
               if (event.type === 'tool_start') {
