@@ -768,11 +768,24 @@
 .thinking-header .header-content {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
   position: relative;
   z-index: 1;
 }
 
-.thinking-header .header-content::before {
+.thinking-header .header-text {
+  display: flex;
+  align-items: center;
+}
+
+.thinking-header .header-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.thinking-header .header-text::before {
   content: '▼';
   margin-right: 0.5rem;
   font-size: 0.7em;
@@ -780,7 +793,7 @@
   opacity: 0.7;
 }
 
-.thinking-header.collapsed .header-content::before {
+.thinking-header.collapsed .header-text::before {
   transform: rotate(-90deg);
 }
 
@@ -851,6 +864,15 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   animation: pulse 2s infinite;
+}
+.time-badge {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7em;
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 @keyframes pulse {

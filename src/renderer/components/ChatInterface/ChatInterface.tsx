@@ -86,6 +86,12 @@ const safeStringify = (value: any): string => {
   }
   return String(value);
 };
+const formatDuration = (durationMs: number): string => {
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  }
+  return `${(durationMs / 1000).toFixed(1)}s`;
+};
 
 // Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
@@ -240,6 +246,8 @@ function ChatInterface({
   }>({});
   const [manuallyToggledToolCalls, setManuallyToggledToolCalls] = useState<{
     [messageId: string]: { [toolIndex: number]: boolean };
+  }>({});  const [thinkingTiming, setThinkingTiming] = useState<{
+    [messageId: string]: { startTime: number; duration?: number };
   }>({});
   const {
     messages,
@@ -379,6 +387,32 @@ function ChatInterface({
       }
     });
   }, [messages, collapsedToolCalls]);
+  // Track thinking timing
+  useEffect(() => {
+    messages.forEach((message) => {
+      if (message.sender === 'assistant') {
+        const { thinkingBlocks } = processMessageContent(message.content);
+        
+        if (thinkingBlocks.length > 0 && !thinkingTiming[message.id]) {
+          // First time detecting thinking for this message
+          setThinkingTiming(prev => ({
+            ...prev,
+            [message.id]: { startTime: Date.now() }
+          }));
+        } else if (thinkingBlocks.length > 0 && thinkingTiming[message.id] && !thinkingTiming[message.id].duration) {
+          // Check if thinking is complete (no more <think> tags being added)
+          const hasOpenThinkTag = message.content.includes('<think>') && !message.content.endsWith('</think>');
+          if (!hasOpenThinkTag) {
+            const duration = Date.now() - thinkingTiming[message.id].startTime;
+            setThinkingTiming(prev => ({
+              ...prev,
+              [message.id]: { ...prev[message.id], duration }
+            }));
+          }
+        }
+      }
+    });
+  }, [messages, thinkingTiming]);
   
   // Auto-collapse dropdown when tool call is completed (only if not manually toggled)
   useEffect(() => {
@@ -490,13 +524,18 @@ function ChatInterface({
                               aria-label={`${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? 'Collapse' : 'Expand'} ${block.toolCall.name} tool call`}
                             >
                               <div className="header-content">
-                                {block.toolCall.name}
-                                {block.toolCall.isError && (
-                                  <span className="error-badge">Error</span>
-                                )}
-                                {block.toolCall.isExecuting && (
-                                  <span className="executing-badge">Executing...</span>
-                                )}
+                                <div className="header-text">{block.toolCall.name}</div>
+                                <div className="header-badges">
+                                  {block.toolCall.isError && (
+                                    <span className="error-badge">Error</span>
+                                  )}
+                                  {block.toolCall.isExecuting && (
+                                    <span className="executing-badge">Executing...</span>
+                                  )}
+                                  {!block.toolCall.isExecuting && block.toolCall.duration_ms && (
+                                    <span className="time-badge">{formatDuration(block.toolCall.duration_ms)}</span>
+                                  )}
+                                </div>
                               </div>
                             </button>
                             <div
@@ -542,7 +581,14 @@ function ChatInterface({
                                 aria-expanded={!collapsedThinking[message.id]}
                                 aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
                               >
-                                <div className="header-content">Reasoning</div>
+                                <div className="header-content">
+                                  <div className="header-text">Reasoning</div>
+                                  <div className="header-badges">
+                                    {thinkingTiming[message.id]?.duration && (
+                                      <span className="time-badge">{formatDuration(thinkingTiming[message.id].duration)}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </button>
                               <div
                                 className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
@@ -586,13 +632,18 @@ function ChatInterface({
                               aria-label={`${collapsedToolCalls[message.id]?.[index] === false ? 'Collapse' : 'Expand'} ${toolCall.name} tool call`}
                             >
                               <div className="header-content">
-                                {toolCall.name}
-                                {toolCall.isError && (
-                                  <span className="error-badge">Error</span>
-                                )}
-                                {toolCall.isExecuting && (
-                                  <span className="executing-badge">Executing...</span>
-                                )}
+                                <div className="header-text">{toolCall.name}</div>
+                                <div className="header-badges">
+                                  {toolCall.isError && (
+                                    <span className="error-badge">Error</span>
+                                  )}
+                                  {toolCall.isExecuting && (
+                                    <span className="executing-badge">Executing...</span>
+                                  )}
+                                  {!toolCall.isExecuting && toolCall.duration_ms && (
+                                    <span className="time-badge">{formatDuration(toolCall.duration_ms)}</span>
+                                  )}
+                                </div>
                               </div>
                             </button>
                             <div
@@ -634,7 +685,14 @@ function ChatInterface({
                             aria-expanded={!collapsedThinking[message.id]}
                             aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
                           >
-                            <div className="header-content">Reasoning</div>
+                            <div className="header-content">
+                              <div className="header-text">Reasoning</div>
+                              <div className="header-badges">
+                                {thinkingTiming[message.id]?.duration && (
+                                  <span className="time-badge">{formatDuration(thinkingTiming[message.id].duration)}</span>
+                                )}
+                              </div>
+                            </div>
                           </button>
                           <div
                             className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}

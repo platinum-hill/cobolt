@@ -84,6 +84,7 @@ class QueryEngine {
           
           const toolName = toolCall.function.name;
           const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+          const toolStartTime = Date.now();
           
           TraceLogger.trace(requestContext, `tool-execution-start`, `Starting execution of tool: ${toolName}`);
           
@@ -94,11 +95,13 @@ class QueryEngine {
             const errorMessage = `Tool '${toolName}' not found in available tools`;
             TraceLogger.trace(requestContext, `tool-execution-error`, errorMessage);
             
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: errorMessage,
-              isError: true
+              isError: true,
+              duration_ms
             };
             
             capturedToolCalls.push(toolCallInfo);
@@ -116,11 +119,13 @@ class QueryEngine {
             const toolResponse = await tool.mcpFunction(requestContext, toolCall);
             TraceLogger.trace(requestContext, `tool-execution-success`, `Tool ${toolName} completed successfully`);
             
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: '',
-              isError: false
+              isError: false,
+              duration_ms
             };
             
             if (toolResponse.isError) {
@@ -153,11 +158,13 @@ class QueryEngine {
             const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
             TraceLogger.trace(requestContext, `tool-execution-error`, `Tool ${toolName} threw error: ${errorMessage}`);
             
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: errorMessage,
-              isError: true
+              isError: true,
+              duration_ms
             };
             
             capturedToolCalls.push(toolCallInfo);
@@ -376,6 +383,7 @@ class QueryEngine {
           
           const toolName = toolCall.function.name;
           const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+          const toolStartTime = Date.now();
           
           TraceLogger.trace(requestContext, 'single-conversation-tool-start', `Executing ${toolName}`);
           TraceLogger.trace(requestContext, 'single-conversation-tool-args', `Tool arguments: ${toolArguments}`);
@@ -393,11 +401,13 @@ class QueryEngine {
             });
             
             // Send completion event
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: errorMessage,
-              isError: true
+              isError: true,
+              duration_ms
             };
             
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
@@ -427,11 +437,13 @@ class QueryEngine {
             });
             
             // Send completion event
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: resultText,
-              isError: toolResponse.isError
+              isError: toolResponse.isError,
+              duration_ms
             };
             
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
@@ -447,11 +459,13 @@ class QueryEngine {
             });
             
             // Send completion event
+            const duration_ms = Date.now() - toolStartTime;
             const toolCallInfo = {
               name: toolName,
               arguments: toolArguments,
               result: errorMessage,
-              isError: true
+              isError: true,
+              duration_ms
             };
             
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
