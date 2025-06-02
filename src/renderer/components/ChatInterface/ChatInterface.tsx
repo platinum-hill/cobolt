@@ -136,7 +136,7 @@ const processExecutionEvents = (
   const eventMatches = content.matchAll(
     /<execution_event>(.*?)<\/execution_event>/gs,
   );
-  for (const match of eventMatches) {
+  Array.from(eventMatches).forEach((match) => {
     try {
       const event = JSON.parse(match[1]) as ExecutionEvent;
       events.push(event);
@@ -144,7 +144,7 @@ const processExecutionEvents = (
     } catch (error) {
       log.error('Failed to parse execution event:', error);
     }
-  }
+  });
 
   return { cleanContent, events };
 };
@@ -153,7 +153,7 @@ const processExecutionEvents = (
 const processMessageContent = (content: string) => {
   // Clean execution events from content first
   const { cleanContent } = processExecutionEvents(content);
-  const processedContent = cleanContent; // ✅ New variable instead of reassigning parameter
+  const processedContent = cleanContent;
 
   const contentBlocks: Array<{
     type: 'text' | 'tool_call' | 'thinking';
@@ -169,10 +169,9 @@ const processMessageContent = (content: string) => {
 
   // Process tool updates (executing status)
   const toolUpdateMatches = processedContent.matchAll(
-    // ✅ Changed from 'content'
     /<tool_calls_update>(.*?)<\/tool_calls_update>/gs,
   );
-  for (const match of toolUpdateMatches) {
+  Array.from(toolUpdateMatches).forEach((match) => {
     try {
       const updateToolCalls = JSON.parse(match[1]);
       updateToolCalls.forEach((updateTool: any) => {
@@ -182,14 +181,13 @@ const processMessageContent = (content: string) => {
     } catch (error) {
       log.error('Failed to parse tool call updates:', error);
     }
-  }
+  });
 
   // Process tool completions
   const toolCompleteMatches = processedContent.matchAll(
-    // ✅ Changed from 'content'
     /<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs,
   );
-  for (const match of toolCompleteMatches) {
+  Array.from(toolCompleteMatches).forEach((match) => {
     try {
       const completedToolCalls = JSON.parse(match[1]);
       completedToolCalls.forEach((completedTool: any) => {
@@ -204,12 +202,12 @@ const processMessageContent = (content: string) => {
     } catch (error) {
       log.error('Failed to parse tool call completions:', error);
     }
-  }
+  });
 
   // Process final tool calls
   const toolCallMatch = processedContent.match(
     /<tool_calls>(.*?)<\/tool_calls>/s,
-  ); // ✅ Changed from 'content'
+  );
   if (toolCallMatch) {
     try {
       const finalToolCalls = JSON.parse(toolCallMatch[1]);
@@ -228,7 +226,7 @@ const processMessageContent = (content: string) => {
 
   // Parse content using position markers for true inline tool calls
   // Split by position markers to get exact tool call locations
-  const parts = processedContent.split(/(<tool_call_position id="[^"]*">)/g); // ✅ Changed from 'content'
+  const parts = processedContent.split(/(<tool_call_position id="[^"]*">)/g);
 
   let currentToolCallIndex = 0;
   const toolCallsArray = Array.from(toolCallsMap.values());
@@ -253,14 +251,13 @@ const processMessageContent = (content: string) => {
         .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
 
       // Handle thinking content - both complete and incomplete blocks
-      let partProcessedContent = cleanPart; // ✅ Renamed to avoid confusion with outer scope
+      let partProcessedContent = cleanPart;
 
       // First, handle complete thinking blocks
       const completeThinkingMatches = partProcessedContent.matchAll(
-        // ✅ Updated variable name
         /<think>(.*?)<\/think>/gs,
       );
-      for (const match of completeThinkingMatches) {
+      Array.from(completeThinkingMatches).forEach((match) => {
         const thinkingContent = match[1];
         if (thinkingContent.trim()) {
           contentBlocks.push({
@@ -271,12 +268,11 @@ const processMessageContent = (content: string) => {
           });
         }
         // Remove from content to avoid double processing
-        partProcessedContent = partProcessedContent.replace(match[0], ''); // ✅ Updated variable name
-      }
+        partProcessedContent = partProcessedContent.replace(match[0], '');
+      });
 
       // Then, handle incomplete thinking blocks (streaming)
       const incompleteThinkingMatch = partProcessedContent.match(
-        // ✅ Updated variable name
         /<think>(.*?)(?!<\/think>)$/s,
       );
       if (incompleteThinkingMatch) {
@@ -291,7 +287,6 @@ const processMessageContent = (content: string) => {
         }
         // Remove from content
         partProcessedContent = partProcessedContent.replace(
-          // ✅ Updated variable name
           incompleteThinkingMatch[0],
           '',
         );
@@ -299,10 +294,9 @@ const processMessageContent = (content: string) => {
 
       // Handle any remaining text content
       if (partProcessedContent.trim()) {
-        // ✅ Updated variable name
         contentBlocks.push({
           type: 'text',
-          content: safeStringify(partProcessedContent), // ✅ Updated variable name
+          content: safeStringify(partProcessedContent),
           id: `text-${index}`,
         });
       }
