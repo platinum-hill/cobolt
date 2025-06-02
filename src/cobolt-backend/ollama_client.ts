@@ -302,7 +302,7 @@ async function initOllama(): Promise<boolean> {
     ollamaServerStartedByApp = true;
     const system: string = platform.toLowerCase();
     
-    if (system === 'win32') {
+    if (system === 'win32' || system === 'linux') {
       // run in the background but capture a few initial log lines
       const env = {
         ...process.env,
@@ -339,11 +339,6 @@ async function initOllama(): Promise<boolean> {
       // let the child continue independently
       child.unref();
 
-    } else if (system === 'linux') {
-      exec(
-        'OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 ollama serve &',
-        logExecOutput(system)
-      );
     } else if (system === 'darwin') {
       exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &',
         logExecOutput('macOS')
