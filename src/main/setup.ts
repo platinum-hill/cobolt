@@ -34,10 +34,10 @@ function getPlatformInfo() {
     name = 'Linux';
   }
 
-  const supported = isWindows || isMac || isLinux;
+  const setupSupported = isWindows || isMac;
 
   return {
-    supported,
+    setupSupported,
     name,
     scriptPath,
     execCommand,
@@ -96,8 +96,10 @@ async function checkAndRunFirstTimeSetup(
   mainWindow: BrowserWindow | null,
 ): Promise<boolean> {
   const platform = getPlatformInfo();
-  log.debug(`Platform ${platform.name}. Supported: ${platform.supported}`);
-  if (!platform.supported) {
+  log.debug(
+    `Platform ${platform.name}. setupSupported: ${platform.setupSupported}`,
+  );
+  if (!platform.setupSupported) {
     log.info('Skipping setup for unsupported platform');
     appMetadata.setSetupComplete();
     notifyRenderer(
