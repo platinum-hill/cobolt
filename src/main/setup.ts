@@ -34,7 +34,7 @@ function getPlatformInfo() {
     name = 'Linux';
   }
 
-  const supported = isWindows || isMac || isLinux;
+  const supported = isWindows || isMac;
 
   return {
     supported,
