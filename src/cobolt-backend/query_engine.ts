@@ -337,20 +337,46 @@ class QueryEngine {
         const defaultTopK = 64;
         const defaultTopP = 0.95;
         
-        // Start conversation with tools enabled
-        const response = await ollama.chat({
-          model: MODELS.CHAT_MODEL, // Use chat model, not tools model
-          messages: conversationMessages,
-          tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-          keep_alive: -1,
-          options: {
-            temperature: defaultTemperature,
-            top_k: defaultTopK,
-            top_p: defaultTopP,
-            num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
-          },
-          stream: true,
-        });
+        // Try to start conversation with tools enabled first
+        let response;
+        try {
+          response = await ollama.chat({
+            model: MODELS.CHAT_MODEL, // Use chat model, not tools model
+            messages: conversationMessages,
+            tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
+            keep_alive: -1,
+            options: {
+              temperature: defaultTemperature,
+              top_k: defaultTopK,
+              top_p: defaultTopP,
+              num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
+            },
+            stream: true,
+          });
+        } catch (toolsError: any) {
+          // Check if the error is due to model not supporting tools
+          const errorMessage = toolsError.message || String(toolsError);
+          if (errorMessage.includes('does not support tools')) {
+            TraceLogger.trace(requestContext, 'model-tools-fallback', `Model ${MODELS.CHAT_MODEL} does not support tools, falling back to simple chat`);
+            
+            // Fall back to simple chat without tools
+            const simpleChatStream = simpleChatOllamaStream(requestContext, systemPrompt, memories);
+            
+            // Stream the response directly from simple chat
+            for await (const content of simpleChatStream) {
+              if (cancellationToken.isCancelled) {
+                return;
+              }
+              yield content;
+            }
+            
+            // Exit early since we've handled the response
+            return;
+          } else {
+            // Re-throw if it's a different error
+            throw toolsError;
+          }
+        }
         
         let assistantContent = '';
         const detectedToolCalls: any[] = [];
