@@ -458,6 +458,24 @@
   background: #7CA97E;
 } 
 
+/* Thinking content scrollbar styling */
+.thinking-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.thinking-content::-webkit-scrollbar-track {
+  background: #1E2329;
+}
+
+.thinking-content::-webkit-scrollbar-thumb {
+  background: #2A2F35;
+  border-radius: 3px;
+}
+
+.thinking-content::-webkit-scrollbar-thumb:hover {
+  background: #7CA97E;
+}
+
 .assistant-message-content {
   position: relative;
   padding-bottom: 24px; /* give space for button */
@@ -773,7 +791,6 @@
   position: relative;
   z-index: 1;
 }
-
 .thinking-header .header-text {
   display: flex;
   align-items: center;

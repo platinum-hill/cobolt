@@ -92,15 +92,54 @@ const formatDuration = (durationMs: number): string => {
   }
   return `${(durationMs / 1000).toFixed(1)}s`;
 };
+interface ExecutionEvent {
+  type: 'tool_start' | 'tool_complete' | 'thinking_start' | 'thinking_complete';
+  id: string;
+  name?: string;
+  duration_ms?: number;
+  isError?: boolean;
+}
+
+interface ExecutionState {
+  [id: string]: {
+    type: 'tool' | 'thinking';
+    name?: string;
+    status: 'executing' | 'complete';
+    duration_ms?: number;
+    isError?: boolean;
+  };
+}
+
+const processExecutionEvents = (content: string): { cleanContent: string; events: ExecutionEvent[] } => {
+  const events: ExecutionEvent[] = [];
+  let cleanContent = content;
+  
+  const eventMatches = content.matchAll(/<execution_event>(.*?)<\/execution_event>/gs);
+  for (const match of eventMatches) {
+    try {
+      const event = JSON.parse(match[1]) as ExecutionEvent;
+      events.push(event);
+      cleanContent = cleanContent.replace(match[0], '');
+    } catch (error) {
+      console.error('Failed to parse execution event:', error);
+    }
+  }
+  
+  return { cleanContent, events };
+};
 
 // Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
+  // Clean execution events from content first
+  const { cleanContent } = processExecutionEvents(content);
+  content = cleanContent;
   const contentBlocks: Array<{
     type: 'text' | 'tool_call' | 'thinking';
     content?: string;
     toolCall?: any;
     thinkingContent?: string;
     id?: string;
+    isComplete?: boolean;
   }> = [];
   
   // First, we need to identify all tool calls and their positions
@@ -183,29 +222,49 @@ const processMessageContent = (content: string) => {
         .replace(/<tool_calls_complete>.*?<\/tool_calls_complete>/gs, '')
         .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
       
-      // Split by thinking tags to preserve order
-      const subParts = cleanPart.split(/(<think>.*?<\/think>)/gs);
+      // Handle thinking content - both complete and incomplete blocks
+      let processedContent = cleanPart;
       
-      subParts.forEach((subPart, subIndex) => {
-        if (subPart.startsWith('<think>') && subPart.endsWith('</think>')) {
-          // This is a thinking block
-          const thinkingContent = subPart.slice(7, -8); // Remove tags
-          if (thinkingContent.trim()) {
-            contentBlocks.push({
-              type: 'thinking',
-              thinkingContent,
-              id: `thinking-${index}-${subIndex}`
-            });
-          }
-        } else if (subPart.trim()) {
-          // This is regular text content - ensure it's a string
+      // First, handle complete thinking blocks
+      const completeThinkingMatches = processedContent.matchAll(/<think>(.*?)<\/think>/gs);
+      for (const match of completeThinkingMatches) {
+        const thinkingContent = match[1];
+        if (thinkingContent.trim()) {
           contentBlocks.push({
-            type: 'text',
-            content: safeStringify(subPart),
-            id: `text-${index}-${subIndex}`
+            type: 'thinking',
+            thinkingContent,
+            id: `thinking-complete-${index}-${match.index}`,
+            isComplete: true
           });
         }
-      });
+        // Remove from content to avoid double processing
+        processedContent = processedContent.replace(match[0], '');
+      }
+      
+      // Then, handle incomplete thinking blocks (streaming)
+      const incompleteThinkingMatch = processedContent.match(/<think>(.*?)(?!<\/think>)$/s);
+      if (incompleteThinkingMatch) {
+        const thinkingContent = incompleteThinkingMatch[1];
+        if (thinkingContent.trim()) {
+          contentBlocks.push({
+            type: 'thinking',
+            thinkingContent,
+            id: `thinking-streaming-${index}`,
+            isComplete: false
+          });
+        }
+        // Remove from content
+        processedContent = processedContent.replace(incompleteThinkingMatch[0], '');
+      }
+      
+      // Handle any remaining text content
+      if (processedContent.trim()) {
+        contentBlocks.push({
+          type: 'text',
+          content: safeStringify(processedContent),
+          id: `text-${index}`
+        });
+      }
     }
   });
   
@@ -246,8 +305,8 @@ function ChatInterface({
   }>({});
   const [manuallyToggledToolCalls, setManuallyToggledToolCalls] = useState<{
     [messageId: string]: { [toolIndex: number]: boolean };
-  }>({});  const [thinkingTiming, setThinkingTiming] = useState<{
-    [messageId: string]: { startTime: number; duration?: number };
+  }>({});  const [executionState, setExecutionState] = useState<{
+    [messageId: string]: ExecutionState;
   }>({});
   const {
     messages,
@@ -319,10 +378,10 @@ function ChatInterface({
     }
   };
 
-  const toggleThinking = (messageId: string) => {
+  const toggleThinking = (thinkingBlockId: string) => {
     setCollapsedThinking((prev) => ({
       ...prev,
-      [messageId]: !prev[messageId],
+      [thinkingBlockId]: !prev[thinkingBlockId],
     }));
   };
 
@@ -349,7 +408,7 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls } = processMessageContent(message.content);
+        const { toolCalls, contentBlocks } = processMessageContent(message.content);
         
         // For each tool call, if dropdown isn't explicitly set, open it
         toolCalls.forEach((_, toolIndex) => {
@@ -363,9 +422,20 @@ function ChatInterface({
             }));
           }
         });
+        
+        // Auto-open thinking dropdowns when thinking blocks are detected
+        const thinkingBlocks = contentBlocks.filter(block => block.type === 'thinking');
+        thinkingBlocks.forEach(block => {
+          if (block.id && collapsedThinking[block.id] === undefined) {
+            setCollapsedThinking((prev) => ({
+              ...prev,
+              [block.id]: false, // false = open
+            }));
+          }
+        });
       }
     });
-  }, [messages, collapsedToolCalls, manuallyToggledToolCalls]);
+  }, [messages, collapsedToolCalls, manuallyToggledToolCalls, collapsedThinking]);
   
   // Auto-scroll dropdown to bottom when tool calls update
   useEffect(() => {
@@ -387,32 +457,57 @@ function ChatInterface({
       }
     });
   }, [messages, collapsedToolCalls]);
-  // Track thinking timing
+  // Process execution events
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { thinkingBlocks } = processMessageContent(message.content);
+        const { events } = processExecutionEvents(message.content);
         
-        if (thinkingBlocks.length > 0 && !thinkingTiming[message.id]) {
-          // First time detecting thinking for this message
-          setThinkingTiming(prev => ({
-            ...prev,
-            [message.id]: { startTime: Date.now() }
-          }));
-        } else if (thinkingBlocks.length > 0 && thinkingTiming[message.id] && !thinkingTiming[message.id].duration) {
-          // Check if thinking is complete (no more <think> tags being added)
-          const hasOpenThinkTag = message.content.includes('<think>') && !message.content.endsWith('</think>');
-          if (!hasOpenThinkTag) {
-            const duration = Date.now() - thinkingTiming[message.id].startTime;
-            setThinkingTiming(prev => ({
+        if (events.length > 0) {
+          setExecutionState(prev => {
+            const messageState = { ...prev[message.id] } || {};
+            
+            events.forEach(event => {
+              if (event.type === 'tool_start') {
+                messageState[event.id] = {
+                  type: 'tool',
+                  name: event.name,
+                  status: 'executing'
+                };
+              } else if (event.type === 'tool_complete') {
+                if (messageState[event.id]) {
+                  messageState[event.id] = {
+                    ...messageState[event.id],
+                    status: 'complete',
+                    duration_ms: event.duration_ms,
+                    isError: event.isError
+                  };
+                }
+              } else if (event.type === 'thinking_start') {
+                messageState[event.id] = {
+                  type: 'thinking',
+                  status: 'executing'
+                };
+              } else if (event.type === 'thinking_complete') {
+                if (messageState[event.id]) {
+                  messageState[event.id] = {
+                    ...messageState[event.id],
+                    status: 'complete',
+                    duration_ms: event.duration_ms
+                  };
+                }
+              }
+            });
+            
+            return {
               ...prev,
-              [message.id]: { ...prev[message.id], duration }
-            }));
-          }
+              [message.id]: messageState
+            };
+          });
         }
       }
     });
-  }, [messages, thinkingTiming]);
+  }, [messages]);
   
   // Auto-collapse dropdown when tool call is completed (only if not manually toggled)
   useEffect(() => {
@@ -478,7 +573,7 @@ function ChatInterface({
               >
               {message.sender === 'assistant' ? (
                 <div className="assistant-message-content">
-                  {hasContentBlocks ? (
+                  {
                     // Sequential rendering of content blocks
                     contentBlocks.map((block, blockIndex) => {
                       if (block.type === 'text') {
@@ -526,15 +621,21 @@ function ChatInterface({
                               <div className="header-content">
                                 <div className="header-text">{block.toolCall.name}</div>
                                 <div className="header-badges">
-                                  {block.toolCall.isError && (
-                                    <span className="error-badge">Error</span>
-                                  )}
-                                  {block.toolCall.isExecuting && (
-                                    <span className="executing-badge">Executing...</span>
-                                  )}
-                                  {!block.toolCall.isExecuting && block.toolCall.duration_ms && (
-                                    <span className="time-badge">{formatDuration(block.toolCall.duration_ms)}</span>
-                                  )}
+                                  {(() => {
+                                    const toolExecutions = Object.values(executionState[message.id] || {}).filter(e => e.type === 'tool' && e.name === block.toolCall.name);
+                                    const isExecuting = toolExecutions.some(e => e.status === 'executing');
+                                    const completedTool = toolExecutions.find(e => e.status === 'complete');
+                                    
+                                    return (
+                                      <>
+                                        {completedTool?.isError && <span className="error-badge">Error</span>}
+                                        {isExecuting && <span className="executing-badge">Executing...</span>}
+                                        {completedTool?.duration_ms && (
+                                          <span className="time-badge">{formatDuration(completedTool.duration_ms)}</span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               </div>
                             </button>
@@ -572,26 +673,38 @@ function ChatInterface({
                         try {
                           // Ensure thinking content is a string before rendering
                           const safeThinkingContent = safeStringify(block.thinkingContent || '');
+                          const blockId = block.id || `thinking-${blockIndex}`;
+                          
+                          // Find execution state for THIS specific thinking block
+                          const allThinkingExecutions = Object.values(executionState[message.id] || {}).filter(e => e.type === 'thinking');
+                          // Count how many thinking blocks came before this one
+                          const thinkingBlocksBefore = contentBlocks.slice(0, blockIndex).filter(b => b.type === 'thinking').length;
+                          const thisBlockExecution = allThinkingExecutions[thinkingBlocksBefore] || null;
+                          
+                          const isThinking = (thisBlockExecution?.status === 'executing') || !block.isComplete;
+                          const isCompleted = thisBlockExecution?.status === 'complete';
+                          
                           return (
-                            <div key={block.id || blockIndex} className="thinking-section" style={{marginBottom: '12px'}}>
+                            <div key={blockId} className="thinking-section" style={{marginBottom: '12px'}}>
                               <button
                                 type="button"
-                                className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                                onClick={() => toggleThinking(message.id)}
-                                aria-expanded={!collapsedThinking[message.id]}
-                                aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
+                                className={`thinking-header ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
+                                onClick={() => toggleThinking(blockId)}
+                                aria-expanded={!collapsedThinking[blockId]}
+                                aria-label={`${collapsedThinking[blockId] ? 'Expand' : 'Collapse'} reasoning section`}
                               >
                                 <div className="header-content">
                                   <div className="header-text">Reasoning</div>
                                   <div className="header-badges">
-                                    {thinkingTiming[message.id]?.duration && (
-                                      <span className="time-badge">{formatDuration(thinkingTiming[message.id].duration)}</span>
+                                    {isThinking && <span className="executing-badge">Thinking...</span>}
+                                    {isCompleted && thisBlockExecution?.duration_ms && (
+                                      <span className="time-badge">{formatDuration(thisBlockExecution.duration_ms)}</span>
                                     )}
                                   </div>
                                 </div>
                               </button>
                               <div
-                                className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
+                                className={`thinking-content ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
                               >
                                 <div className="thinking-block">
                                   {safeThinkingContent}
@@ -613,105 +726,7 @@ function ChatInterface({
                       
                       return null;
                     })
-                  ) : (
-                    // FALLBACK: Old grouped rendering for compatibility
-                    <>
-                      {hasToolCalls && toolCalls.map((toolCall, index) => {
-                        if (!toolCallsRefs.current[message.id]) {
-                          toolCallsRefs.current[message.id] = {};
-                        }
-                        
-                        return (
-                          // eslint-disable-next-line react/no-array-index-key
-                          <div key={index} className="individual-tool-call" style={{marginBottom: '12px'}}>
-                            <button
-                              type="button"
-                              className={`thinking-header ${collapsedToolCalls[message.id]?.[index] === false ? '' : 'collapsed'}`}
-                              onClick={() => toggleToolCall(message.id, index)}
-                              aria-expanded={collapsedToolCalls[message.id]?.[index] === false}
-                              aria-label={`${collapsedToolCalls[message.id]?.[index] === false ? 'Collapse' : 'Expand'} ${toolCall.name} tool call`}
-                            >
-                              <div className="header-content">
-                                <div className="header-text">{toolCall.name}</div>
-                                <div className="header-badges">
-                                  {toolCall.isError && (
-                                    <span className="error-badge">Error</span>
-                                  )}
-                                  {toolCall.isExecuting && (
-                                    <span className="executing-badge">Executing...</span>
-                                  )}
-                                  {!toolCall.isExecuting && toolCall.duration_ms && (
-                                    <span className="time-badge">{formatDuration(toolCall.duration_ms)}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                            <div
-                              ref={(el) => {
-                                if (!toolCallsRefs.current[message.id]) {
-                                  toolCallsRefs.current[message.id] = {};
-                                }
-                                toolCallsRefs.current[message.id][index] = el;
-                              }}
-                              className={`thinking-content ${collapsedToolCalls[message.id]?.[index] === false ? '' : 'collapsed'}`}
-                            >
-                              <div className="tool-call-block">
-                                <div className="tool-call-args">
-                                  <div className="section-label">Arguments:</div>
-                                  <pre className="code-block">
-                                    {safeStringify(toolCall.arguments)}
-                                  </pre>
-                                </div>
-                                <div className="tool-call-result">
-                                  <div className="section-label">Result:</div>
-                                  <div
-                                    className={`result-content ${toolCall.isError ? 'error' : ''}`}
-                                  >
-                                    {safeStringify(toolCall.result)}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {hasThinking && (
-                        <div className="thinking-section">
-                          <button
-                            type="button"
-                            className={`thinking-header ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                            onClick={() => toggleThinking(message.id)}
-                            aria-expanded={!collapsedThinking[message.id]}
-                            aria-label={`${collapsedThinking[message.id] ? 'Expand' : 'Collapse'} reasoning section`}
-                          >
-                            <div className="header-content">
-                              <div className="header-text">Reasoning</div>
-                              <div className="header-badges">
-                                {thinkingTiming[message.id]?.duration && (
-                                  <span className="time-badge">{formatDuration(thinkingTiming[message.id].duration)}</span>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                          <div
-                            className={`thinking-content ${collapsedThinking[message.id] ? 'collapsed' : ''}`}
-                          >
-                            {thinkingBlocks.map((block, index) => (
-                              // eslint-disable-next-line react/no-array-index-key
-                              <div key={index} className="thinking-block">
-                                {block}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {regularContent}
-                      </ReactMarkdown>
-                    </>
-                  )}
+                  }
 
                   <div className="message-actions">
                     <button

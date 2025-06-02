@@ -10,7 +10,34 @@ import  { ChatHistory } from './chat_history';
 import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 
+interface ExecutionEvent {
+  type: 'tool_start' | 'tool_complete' | 'thinking_start' | 'thinking_complete';
+  id: string;
+  name?: string;
+  duration_ms?: number;
+  isError?: boolean;
+}
+
 class QueryEngine {
+  private emitExecutionEvent(event: ExecutionEvent): string {
+    return `<execution_event>${JSON.stringify(event)}</execution_event>`;
+  }
+
+  private *processThinkingInContent(content: string, thinkingState: {id?: string, startTime?: number}): Generator<string> {
+    if (content.includes('<think>') && !thinkingState.id) {
+      thinkingState.id = `thinking-${Date.now()}`;
+      thinkingState.startTime = Date.now();
+      yield this.emitExecutionEvent({type: 'thinking_start', id: thinkingState.id});
+    }
+    
+    if (content.includes('</think>') && thinkingState.id && thinkingState.startTime) {
+      const duration_ms = Date.now() - thinkingState.startTime;
+      yield this.emitExecutionEvent({type: 'thinking_complete', id: thinkingState.id, duration_ms});
+      thinkingState.id = undefined;
+      thinkingState.startTime = undefined;
+    }
+  }
+
   /**
    * Create a generator that processes the streaming response and executes tools on the fly
    */
@@ -24,11 +51,17 @@ class QueryEngine {
     
     let detectedToolCalls: any[] = [];
     let hasContent = false;
+    let thinkingState: {id?: string, startTime?: number} = {};
     
     try {
       for await (const chunk of streamingResponse) {
         if (cancellationToken.isCancelled) {
           return;
+        }
+        
+        // Process thinking events
+        for (const thinkingEvent of this.processThinkingInContent(chunk, thinkingState)) {
+          yield thinkingEvent;
         }
         
         // Check for tool call detection
@@ -84,7 +117,10 @@ class QueryEngine {
           
           const toolName = toolCall.function.name;
           const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+          const toolId = `tool-${toolName}-${Date.now()}`;
           const toolStartTime = Date.now();
+          
+          yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
           
           TraceLogger.trace(requestContext, `tool-execution-start`, `Starting execution of tool: ${toolName}`);
           
@@ -110,6 +146,7 @@ class QueryEngine {
             toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`) });
             
             // Send completion event immediately for non-existent tool
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
             
             continue;
@@ -152,6 +189,7 @@ class QueryEngine {
             capturedToolCalls.push(toolCallInfo);
             
             // Send completion event for successful tool
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: toolResponse.isError});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
             
           } catch (error: any) {
@@ -170,6 +208,7 @@ class QueryEngine {
             capturedToolCalls.push(toolCallInfo);
             
             // Send completion event for failed tool
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
           }
         }
@@ -315,6 +354,7 @@ class QueryEngine {
         
         let assistantContent = '';
         let detectedToolCalls: any[] = [];
+        let thinkingState: {id?: string, startTime?: number} = {};
         
         // Stream response and collect tool calls
         for await (const part of response) {
@@ -324,6 +364,11 @@ class QueryEngine {
           
           // Stream content immediately
           if (part.message.content) {
+            // Process thinking events
+            for (const thinkingEvent of this.processThinkingInContent(part.message.content, thinkingState)) {
+              yield thinkingEvent;
+            }
+            
             assistantContent += part.message.content;
             yield part.message.content;
           }
@@ -383,7 +428,10 @@ class QueryEngine {
           
           const toolName = toolCall.function.name;
           const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+          const toolId = `tool-${toolName}-${Date.now()}`;
           const toolStartTime = Date.now();
+          
+          yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
           
           TraceLogger.trace(requestContext, 'single-conversation-tool-start', `Executing ${toolName}`);
           TraceLogger.trace(requestContext, 'single-conversation-tool-args', `Tool arguments: ${toolArguments}`);
@@ -410,6 +458,7 @@ class QueryEngine {
               duration_ms
             };
             
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
             continue;
           }
@@ -446,6 +495,7 @@ class QueryEngine {
               duration_ms
             };
             
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: toolResponse.isError});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
             
           } catch (error: any) {
@@ -468,6 +518,7 @@ class QueryEngine {
               duration_ms
             };
             
+            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
             yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
           }
         }
