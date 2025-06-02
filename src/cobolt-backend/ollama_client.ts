@@ -398,7 +398,7 @@ async function stopOllama() {
   } else if (system === 'darwin') {
     exec('brew services stop ollama', logExecOutput(system));
   } else if (system === 'linux') {
-    exec('pkill -f ollama', logExecOutput(system));
+    exec('systemctl stop ollama.service', logExecOutput(system));
   }
 }
 
