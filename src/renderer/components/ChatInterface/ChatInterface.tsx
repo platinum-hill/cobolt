@@ -1,4 +1,11 @@
-import React, { useRef, useEffect, useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useState,
+  Component,
+  ErrorInfo,
+  ReactNode,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Clipboard } from 'lucide-react';
@@ -33,20 +40,29 @@ class MessageErrorBoundary extends Component<
   }
 
   render() {
-    if (this.state.hasError) {
+    const { hasError } = this.state;
+    if (hasError) {
       return (
-        <div className="message-error" style={{
-          background: '#2a1a1a',
-          border: '1px solid #ff6b6b',
-          borderRadius: '8px',
-          padding: '12px',
-          margin: '8px 0'
-        }}>
-          <h4 style={{ color: '#ff6b6b', margin: '0 0 8px 0' }}>Message Rendering Error</h4>
-          <p style={{ color: '#cccccc', fontSize: '14px', margin: '0 0 12px 0' }}>
+        <div
+          className="message-error"
+          style={{
+            background: '#2a1a1a',
+            border: '1px solid #ff6b6b',
+            borderRadius: '8px',
+            padding: '12px',
+            margin: '8px 0',
+          }}
+        >
+          <h4 style={{ color: '#ff6b6b', margin: '0 0 8px 0' }}>
+            Message Rendering Error
+          </h4>
+          <p
+            style={{ color: '#cccccc', fontSize: '14px', margin: '0 0 12px 0' }}
+          >
             This message contains corrupted content and cannot be displayed.
           </p>
-          <button 
+          <button
+            type="button"
             onClick={() => this.setState({ hasError: false })}
             style={{
               background: '#ff6b6b',
@@ -55,7 +71,7 @@ class MessageErrorBoundary extends Component<
               padding: '6px 12px',
               borderRadius: '4px',
               cursor: 'pointer',
-              fontSize: '12px'
+              fontSize: '12px',
             }}
           >
             Try Again
@@ -64,7 +80,8 @@ class MessageErrorBoundary extends Component<
       );
     }
 
-    return this.props.children;
+    const { children } = this.props;
+    return children;
   }
 }
 
@@ -110,21 +127,25 @@ interface ExecutionState {
   };
 }
 
-const processExecutionEvents = (content: string): { cleanContent: string; events: ExecutionEvent[] } => {
+const processExecutionEvents = (
+  content: string,
+): { cleanContent: string; events: ExecutionEvent[] } => {
   const events: ExecutionEvent[] = [];
   let cleanContent = content;
-  
-  const eventMatches = content.matchAll(/<execution_event>(.*?)<\/execution_event>/gs);
+
+  const eventMatches = content.matchAll(
+    /<execution_event>(.*?)<\/execution_event>/gs,
+  );
   for (const match of eventMatches) {
     try {
       const event = JSON.parse(match[1]) as ExecutionEvent;
       events.push(event);
       cleanContent = cleanContent.replace(match[0], '');
     } catch (error) {
-      console.error('Failed to parse execution event:', error);
+      log.error('Failed to parse execution event:', error);
     }
   }
-  
+
   return { cleanContent, events };
 };
 
@@ -132,7 +153,8 @@ const processExecutionEvents = (content: string): { cleanContent: string; events
 const processMessageContent = (content: string) => {
   // Clean execution events from content first
   const { cleanContent } = processExecutionEvents(content);
-  content = cleanContent;
+  const processedContent = cleanContent; // ✅ New variable instead of reassigning parameter
+
   const contentBlocks: Array<{
     type: 'text' | 'tool_call' | 'thinking';
     content?: string;
@@ -141,12 +163,15 @@ const processMessageContent = (content: string) => {
     id?: string;
     isComplete?: boolean;
   }> = [];
-  
+
   // First, we need to identify all tool calls and their positions
   const toolCallsMap = new Map<string, any>();
-  
+
   // Process tool updates (executing status)
-  const toolUpdateMatches = content.matchAll(/<tool_calls_update>(.*?)<\/tool_calls_update>/gs);
+  const toolUpdateMatches = processedContent.matchAll(
+    // ✅ Changed from 'content'
+    /<tool_calls_update>(.*?)<\/tool_calls_update>/gs,
+  );
   for (const match of toolUpdateMatches) {
     try {
       const updateToolCalls = JSON.parse(match[1]);
@@ -158,28 +183,33 @@ const processMessageContent = (content: string) => {
       log.error('Failed to parse tool call updates:', error);
     }
   }
-  
+
   // Process tool completions
-  const toolCompleteMatches = content.matchAll(/<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs);
+  const toolCompleteMatches = processedContent.matchAll(
+    // ✅ Changed from 'content'
+    /<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs,
+  );
   for (const match of toolCompleteMatches) {
     try {
       const completedToolCalls = JSON.parse(match[1]);
       completedToolCalls.forEach((completedTool: any) => {
         const key = `${completedTool.name}-${completedTool.arguments}`;
         const existingTool = toolCallsMap.get(key);
-        toolCallsMap.set(key, { 
-          ...existingTool, 
-          ...completedTool, 
-          isExecuting: false 
+        toolCallsMap.set(key, {
+          ...existingTool,
+          ...completedTool,
+          isExecuting: false,
         });
       });
     } catch (error) {
       log.error('Failed to parse tool call completions:', error);
     }
   }
-  
+
   // Process final tool calls
-  const toolCallMatch = content.match(/<tool_calls>(.*?)<\/tool_calls>/s);
+  const toolCallMatch = processedContent.match(
+    /<tool_calls>(.*?)<\/tool_calls>/s,
+  ); // ✅ Changed from 'content'
   if (toolCallMatch) {
     try {
       const finalToolCalls = JSON.parse(toolCallMatch[1]);
@@ -188,21 +218,21 @@ const processMessageContent = (content: string) => {
         const existingTool = toolCallsMap.get(key);
         toolCallsMap.set(key, {
           ...finalTool,
-          isExecuting: existingTool?.isExecuting || false
+          isExecuting: existingTool?.isExecuting || false,
         });
       });
     } catch (error) {
       log.error('Failed to parse final tool calls:', error);
     }
   }
-  
+
   // Parse content using position markers for true inline tool calls
   // Split by position markers to get exact tool call locations
-  const parts = content.split(/(<tool_call_position id="[^"]*">)/g);
-  
+  const parts = processedContent.split(/(<tool_call_position id="[^"]*">)/g); // ✅ Changed from 'content'
+
   let currentToolCallIndex = 0;
   const toolCallsArray = Array.from(toolCallsMap.values());
-  
+
   parts.forEach((part, index) => {
     if (part.startsWith('<tool_call_position')) {
       // Insert tool call at this exact position
@@ -211,22 +241,25 @@ const processMessageContent = (content: string) => {
         contentBlocks.push({
           type: 'tool_call',
           toolCall,
-          id: `tool-${currentToolCallIndex}`
+          id: `tool-${currentToolCallIndex}`,
         });
-        currentToolCallIndex++;
+        currentToolCallIndex += 1;
       }
     } else {
       // Clean content by removing tool call tags
-      let cleanPart = part
+      const cleanPart = part
         .replace(/<tool_calls_update>.*?<\/tool_calls_update>/gs, '')
         .replace(/<tool_calls_complete>.*?<\/tool_calls_complete>/gs, '')
         .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
-      
+
       // Handle thinking content - both complete and incomplete blocks
-      let processedContent = cleanPart;
-      
+      let partProcessedContent = cleanPart; // ✅ Renamed to avoid confusion with outer scope
+
       // First, handle complete thinking blocks
-      const completeThinkingMatches = processedContent.matchAll(/<think>(.*?)<\/think>/gs);
+      const completeThinkingMatches = partProcessedContent.matchAll(
+        // ✅ Updated variable name
+        /<think>(.*?)<\/think>/gs,
+      );
       for (const match of completeThinkingMatches) {
         const thinkingContent = match[1];
         if (thinkingContent.trim()) {
@@ -234,15 +267,18 @@ const processMessageContent = (content: string) => {
             type: 'thinking',
             thinkingContent,
             id: `thinking-complete-${index}-${match.index}`,
-            isComplete: true
+            isComplete: true,
           });
         }
         // Remove from content to avoid double processing
-        processedContent = processedContent.replace(match[0], '');
+        partProcessedContent = partProcessedContent.replace(match[0], ''); // ✅ Updated variable name
       }
-      
+
       // Then, handle incomplete thinking blocks (streaming)
-      const incompleteThinkingMatch = processedContent.match(/<think>(.*?)(?!<\/think>)$/s);
+      const incompleteThinkingMatch = partProcessedContent.match(
+        // ✅ Updated variable name
+        /<think>(.*?)(?!<\/think>)$/s,
+      );
       if (incompleteThinkingMatch) {
         const thinkingContent = incompleteThinkingMatch[1];
         if (thinkingContent.trim()) {
@@ -250,46 +286,51 @@ const processMessageContent = (content: string) => {
             type: 'thinking',
             thinkingContent,
             id: `thinking-streaming-${index}`,
-            isComplete: false
+            isComplete: false,
           });
         }
         // Remove from content
-        processedContent = processedContent.replace(incompleteThinkingMatch[0], '');
+        partProcessedContent = partProcessedContent.replace(
+          // ✅ Updated variable name
+          incompleteThinkingMatch[0],
+          '',
+        );
       }
-      
+
       // Handle any remaining text content
-      if (processedContent.trim()) {
+      if (partProcessedContent.trim()) {
+        // ✅ Updated variable name
         contentBlocks.push({
           type: 'text',
-          content: safeStringify(processedContent),
-          id: `text-${index}`
+          content: safeStringify(partProcessedContent), // ✅ Updated variable name
+          id: `text-${index}`,
         });
       }
     }
   });
-  
+
   // Add any remaining tool calls at the end (fallback for tools without position markers)
   while (currentToolCallIndex < toolCallsArray.length) {
     const toolCall = toolCallsArray[currentToolCallIndex];
     contentBlocks.push({
       type: 'tool_call',
       toolCall,
-      id: `tool-remaining-${currentToolCallIndex}`
+      id: `tool-remaining-${currentToolCallIndex}`,
     });
-    currentToolCallIndex++;
+    currentToolCallIndex += 1;
   }
-  
-  // Return properly ordered content blocks 
+
+  // Return properly ordered content blocks
   return {
     contentBlocks,
     toolCalls: Array.from(toolCallsMap.values()),
     thinkingBlocks: contentBlocks
-      .filter(block => block.type === 'thinking')
-      .map(block => safeStringify(block.thinkingContent || '')),
+      .filter((block) => block.type === 'thinking')
+      .map((block) => safeStringify(block.thinkingContent || '')),
     regularContent: contentBlocks
-      .filter(block => block.type === 'text')
-      .map(block => safeStringify(block.content || ''))
-      .join('')
+      .filter((block) => block.type === 'text')
+      .map((block) => safeStringify(block.content || ''))
+      .join(''),
   };
 };
 
@@ -305,7 +346,8 @@ function ChatInterface({
   }>({});
   const [manuallyToggledToolCalls, setManuallyToggledToolCalls] = useState<{
     [messageId: string]: { [toolIndex: number]: boolean };
-  }>({});  const [executionState, setExecutionState] = useState<{
+  }>({});
+  const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});
   const {
@@ -325,8 +367,12 @@ function ChatInterface({
 
   const { ref: messagesEndRef } = useScrollToBottom(messages);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const toolCallsRefs = useRef<{ [messageId: string]: { [toolIndex: number]: HTMLDivElement | null } }>({});
-  const autoCollapseScheduled = useRef<{ [messageId: string]: { [toolIndex: number]: boolean } }>({});
+  const toolCallsRefs = useRef<{
+    [messageId: string]: { [toolIndex: number]: HTMLDivElement | null };
+  }>({});
+  const autoCollapseScheduled = useRef<{
+    [messageId: string]: { [toolIndex: number]: boolean };
+  }>({});
 
   // Separate function to adjust textarea height for reuse
   const adjustTextareaHeight = () => {
@@ -390,10 +436,10 @@ function ChatInterface({
       ...prev,
       [messageId]: {
         ...prev[messageId],
-        [toolIndex]: prev[messageId]?.[toolIndex] !== false ? false : true,
+        [toolIndex]: prev[messageId]?.[toolIndex] === false,
       },
     }));
-    
+
     // Mark this dropdown as manually toggled by user (prevents auto-collapse)
     setManuallyToggledToolCalls((prev) => ({
       ...prev,
@@ -403,13 +449,15 @@ function ChatInterface({
       },
     }));
   };
-  
+
   // Auto-open dropdown when tool calls are detected
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls, contentBlocks } = processMessageContent(message.content);
-        
+        const { toolCalls, contentBlocks } = processMessageContent(
+          message.content,
+        );
+
         // For each tool call, if dropdown isn't explicitly set, open it
         toolCalls.forEach((_, toolIndex) => {
           if (collapsedToolCalls[message.id]?.[toolIndex] === undefined) {
@@ -422,10 +470,12 @@ function ChatInterface({
             }));
           }
         });
-        
+
         // Auto-open thinking dropdowns when thinking blocks are detected
-        const thinkingBlocks = contentBlocks.filter(block => block.type === 'thinking');
-        thinkingBlocks.forEach(block => {
+        const thinkingBlocks = contentBlocks.filter(
+          (block) => block.type === 'thinking',
+        );
+        thinkingBlocks.forEach((block) => {
           const blockId = block.id;
           if (blockId && collapsedThinking[blockId] === undefined) {
             setCollapsedThinking((prev) => ({
@@ -436,18 +486,27 @@ function ChatInterface({
         });
       }
     });
-  }, [messages, collapsedToolCalls, manuallyToggledToolCalls, collapsedThinking]);
-  
+  }, [
+    messages,
+    collapsedToolCalls,
+    manuallyToggledToolCalls,
+    collapsedThinking,
+  ]);
+
   // Auto-scroll dropdown to bottom when tool calls update
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
         const { toolCalls } = processMessageContent(message.content);
-        
+
         // For each executing tool, scroll its dropdown to bottom if open
         toolCalls.forEach((toolCall, toolIndex) => {
-          if (toolCall.isExecuting && collapsedToolCalls[message.id]?.[toolIndex] === false) {
-            const toolCallContent = toolCallsRefs.current[message.id]?.[toolIndex];
+          if (
+            toolCall.isExecuting &&
+            collapsedToolCalls[message.id]?.[toolIndex] === false
+          ) {
+            const toolCallContent =
+              toolCallsRefs.current[message.id]?.[toolIndex];
             if (toolCallContent) {
               setTimeout(() => {
                 toolCallContent.scrollTop = toolCallContent.scrollHeight;
@@ -463,17 +522,19 @@ function ChatInterface({
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
         const { events } = processExecutionEvents(message.content);
-        
+
         if (events.length > 0) {
-          setExecutionState(prev => {
-            const messageState = prev[message.id] ? { ...prev[message.id] } : {};
-            
-            events.forEach(event => {
+          setExecutionState((prev) => {
+            const messageState = prev[message.id]
+              ? { ...prev[message.id] }
+              : {};
+
+            events.forEach((event) => {
               if (event.type === 'tool_start') {
                 messageState[event.id] = {
                   type: 'tool',
                   name: event.name,
-                  status: 'executing'
+                  status: 'executing',
                 };
               } else if (event.type === 'tool_complete') {
                 if (messageState[event.id]) {
@@ -481,57 +542,58 @@ function ChatInterface({
                     ...messageState[event.id],
                     status: 'complete',
                     duration_ms: event.duration_ms,
-                    isError: event.isError
+                    isError: event.isError,
                   };
                 }
               } else if (event.type === 'thinking_start') {
                 messageState[event.id] = {
                   type: 'thinking',
-                  status: 'executing'
+                  status: 'executing',
                 };
               } else if (event.type === 'thinking_complete') {
                 if (messageState[event.id]) {
                   messageState[event.id] = {
                     ...messageState[event.id],
                     status: 'complete',
-                    duration_ms: event.duration_ms
+                    duration_ms: event.duration_ms,
                   };
                 }
               }
             });
-            
+
             return {
               ...prev,
-              [message.id]: messageState
+              [message.id]: messageState,
             };
           });
         }
       }
     });
   }, [messages]);
-  
+
   // Auto-collapse dropdown when tool call is completed (only if not manually toggled)
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
         const { toolCalls } = processMessageContent(message.content);
-        
+
         // For each tool call, check if it should auto-collapse
         toolCalls.forEach((toolCall, toolIndex) => {
           const isCompleted = !toolCall.isExecuting;
           const isOpen = collapsedToolCalls[message.id]?.[toolIndex] === false;
-          const notManuallyToggled = !manuallyToggledToolCalls[message.id]?.[toolIndex];
-          const notScheduled = !autoCollapseScheduled.current[message.id]?.[toolIndex];
-          
+          const notManuallyToggled =
+            !manuallyToggledToolCalls[message.id]?.[toolIndex];
+          const notScheduled =
+            !autoCollapseScheduled.current[message.id]?.[toolIndex];
+
           // If dropdown is open, tool completed, hasn't been manually toggled, and we haven't scheduled auto-collapse yet
           if (isOpen && isCompleted && notManuallyToggled && notScheduled) {
-            
             // Mark as scheduled to prevent duplicate timeouts
             if (!autoCollapseScheduled.current[message.id]) {
               autoCollapseScheduled.current[message.id] = {};
             }
             autoCollapseScheduled.current[message.id][toolIndex] = true;
-            
+
             setTimeout(() => {
               setCollapsedToolCalls((prev) => ({
                 ...prev,
@@ -549,7 +611,7 @@ function ChatInterface({
         });
       }
     });
-  }, [messages, collapsedToolCalls]);
+  }, [messages, manuallyToggledToolCalls, collapsedToolCalls]);
 
   return (
     <div
@@ -561,28 +623,30 @@ function ChatInterface({
 
       <div className="messages-container">
         {messages.map((message) => {
-          const { contentBlocks, thinkingBlocks, toolCalls, regularContent } =
-            processMessageContent(message.content);
-          const hasThinking = thinkingBlocks.length > 0;
-          const hasToolCalls = toolCalls.length > 0;
-          const hasContentBlocks = contentBlocks && contentBlocks.length > 0;
+          const { contentBlocks, toolCalls } = processMessageContent(
+            message.content,
+          );
 
           return (
             <MessageErrorBoundary key={message.id} messageId={message.id}>
               <div
                 className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
               >
-              {message.sender === 'assistant' ? (
-                <div className="assistant-message-content">
-                  {
-                    // Sequential rendering of content blocks
-                    contentBlocks.map((block, blockIndex) => {
+                {message.sender === 'assistant' ? (
+                  <div className="assistant-message-content">
+                    {/* Sequential rendering of content blocks */}
+                    {contentBlocks.map((block, blockIndex) => {
                       if (block.type === 'text') {
                         try {
                           // Ensure content is a string before rendering
-                          const safeContent = safeStringify(block.content || '');
+                          const safeContent = safeStringify(
+                            block.content || '',
+                          );
                           return (
-                            <div key={block.id || blockIndex} className="text-block">
+                            <div
+                              key={block.id || blockIndex}
+                              className="text-block"
+                            >
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                 {safeContent}
                               </ReactMarkdown>
@@ -591,48 +655,93 @@ function ChatInterface({
                         } catch (error) {
                           log.error('Error rendering text block:', error);
                           return (
-                            <div key={block.id || blockIndex} className="text-block error">
-                              <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>
-                                [Error rendering content - content may be corrupted]
+                            <div
+                              key={block.id || blockIndex}
+                              className="text-block error"
+                            >
+                              <p
+                                style={{
+                                  color: '#ff6b6b',
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                [Error rendering content - content may be
+                                corrupted]
                               </p>
                             </div>
                           );
                         }
-                      } 
-                      
+                      }
+
                       if (block.type === 'tool_call' && block.toolCall) {
                         // Find the tool call index for state management
                         const toolCallIndex = toolCalls.findIndex(
-                          tc => tc.name === block.toolCall.name && tc.arguments === block.toolCall.arguments
+                          (tc) =>
+                            tc.name === block.toolCall.name &&
+                            tc.arguments === block.toolCall.arguments,
                         );
-                        
+
                         if (!toolCallsRefs.current[message.id]) {
                           toolCallsRefs.current[message.id] = {};
                         }
-                        
+
                         return (
-                          <div key={block.id || blockIndex} className="individual-tool-call" style={{marginBottom: '12px'}}>
+                          <div
+                            key={block.id || blockIndex}
+                            className="individual-tool-call"
+                            style={{ marginBottom: '12px' }}
+                          >
                             <button
                               type="button"
                               className={`thinking-header ${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? '' : 'collapsed'}`}
-                              onClick={() => toggleToolCall(message.id, toolCallIndex)}
-                              aria-expanded={collapsedToolCalls[message.id]?.[toolCallIndex] === false}
+                              onClick={() =>
+                                toggleToolCall(message.id, toolCallIndex)
+                              }
+                              aria-expanded={
+                                collapsedToolCalls[message.id]?.[
+                                  toolCallIndex
+                                ] === false
+                              }
                               aria-label={`${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? 'Collapse' : 'Expand'} ${block.toolCall.name} tool call`}
                             >
                               <div className="header-content">
-                                <div className="header-text">{block.toolCall.name}</div>
+                                <div className="header-text">
+                                  {block.toolCall.name}
+                                </div>
                                 <div className="header-badges">
                                   {(() => {
-                                    const toolExecutions = Object.values(executionState[message.id] || {}).filter(e => e.type === 'tool' && e.name === block.toolCall.name);
-                                    const isExecuting = toolExecutions.some(e => e.status === 'executing');
-                                    const completedTool = toolExecutions.find(e => e.status === 'complete');
-                                    
+                                    const toolExecutions = Object.values(
+                                      executionState[message.id] || {},
+                                    ).filter(
+                                      (e) =>
+                                        e.type === 'tool' &&
+                                        e.name === block.toolCall.name,
+                                    );
+                                    const isExecuting = toolExecutions.some(
+                                      (e) => e.status === 'executing',
+                                    );
+                                    const completedTool = toolExecutions.find(
+                                      (e) => e.status === 'complete',
+                                    );
+
                                     return (
                                       <>
-                                        {completedTool?.isError && <span className="error-badge">Error</span>}
-                                        {isExecuting && <span className="executing-badge">Executing...</span>}
+                                        {completedTool?.isError && (
+                                          <span className="error-badge">
+                                            Error
+                                          </span>
+                                        )}
+                                        {isExecuting && (
+                                          <span className="executing-badge">
+                                            Executing...
+                                          </span>
+                                        )}
                                         {completedTool?.duration_ms && (
-                                          <span className="time-badge">{formatDuration(completedTool.duration_ms)}</span>
+                                          <span className="time-badge">
+                                            {formatDuration(
+                                              completedTool.duration_ms,
+                                            )}
+                                          </span>
                                         )}
                                       </>
                                     );
@@ -645,13 +754,17 @@ function ChatInterface({
                                 if (!toolCallsRefs.current[message.id]) {
                                   toolCallsRefs.current[message.id] = {};
                                 }
-                                toolCallsRefs.current[message.id][toolCallIndex] = el;
+                                toolCallsRefs.current[message.id][
+                                  toolCallIndex
+                                ] = el;
                               }}
                               className={`thinking-content ${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? '' : 'collapsed'}`}
                             >
                               <div className="tool-call-block">
                                 <div className="tool-call-args">
-                                  <div className="section-label">Arguments:</div>
+                                  <div className="section-label">
+                                    Arguments:
+                                  </div>
                                   <pre className="code-block">
                                     {safeStringify(block.toolCall.arguments)}
                                   </pre>
@@ -669,24 +782,38 @@ function ChatInterface({
                           </div>
                         );
                       }
-                      
+
                       if (block.type === 'thinking') {
                         try {
                           // Ensure thinking content is a string before rendering
-                          const safeThinkingContent = safeStringify(block.thinkingContent || '');
+                          const safeThinkingContent = safeStringify(
+                            block.thinkingContent || '',
+                          );
                           const blockId = block.id || `thinking-${blockIndex}`;
-                          
+
                           // Find execution state for THIS specific thinking block
-                          const allThinkingExecutions = Object.values(executionState[message.id] || {}).filter(e => e.type === 'thinking');
+                          const allThinkingExecutions = Object.values(
+                            executionState[message.id] || {},
+                          ).filter((e) => e.type === 'thinking');
                           // Count how many thinking blocks came before this one
-                          const thinkingBlocksBefore = contentBlocks.slice(0, blockIndex).filter(b => b.type === 'thinking').length;
-                          const thisBlockExecution = allThinkingExecutions[thinkingBlocksBefore] || null;
-                          
-                          const isThinking = (thisBlockExecution?.status === 'executing') || !block.isComplete;
-                          const isCompleted = thisBlockExecution?.status === 'complete';
-                          
+                          const thinkingBlocksBefore = contentBlocks
+                            .slice(0, blockIndex)
+                            .filter((b) => b.type === 'thinking').length;
+                          const thisBlockExecution =
+                            allThinkingExecutions[thinkingBlocksBefore] || null;
+
+                          const isThinking =
+                            thisBlockExecution?.status === 'executing' ||
+                            !block.isComplete;
+                          const isCompleted =
+                            thisBlockExecution?.status === 'complete';
+
                           return (
-                            <div key={blockId} className="thinking-section" style={{marginBottom: '12px'}}>
+                            <div
+                              key={blockId}
+                              className="thinking-section"
+                              style={{ marginBottom: '12px' }}
+                            >
                               <button
                                 type="button"
                                 className={`thinking-header ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
@@ -697,10 +824,19 @@ function ChatInterface({
                                 <div className="header-content">
                                   <div className="header-text">Reasoning</div>
                                   <div className="header-badges">
-                                    {isThinking && <span className="executing-badge">Thinking...</span>}
-                                    {isCompleted && thisBlockExecution?.duration_ms && (
-                                      <span className="time-badge">{formatDuration(thisBlockExecution.duration_ms)}</span>
+                                    {isThinking && (
+                                      <span className="executing-badge">
+                                        Thinking...
+                                      </span>
                                     )}
+                                    {isCompleted &&
+                                      thisBlockExecution?.duration_ms && (
+                                        <span className="time-badge">
+                                          {formatDuration(
+                                            thisBlockExecution.duration_ms,
+                                          )}
+                                        </span>
+                                      )}
                                   </div>
                                 </div>
                               </button>
@@ -716,36 +852,43 @@ function ChatInterface({
                         } catch (error) {
                           log.error('Error rendering thinking block:', error);
                           return (
-                            <div key={block.id || blockIndex} className="thinking-section error">
-                              <p style={{color: '#ff6b6b', fontStyle: 'italic'}}>
+                            <div
+                              key={block.id || blockIndex}
+                              className="thinking-section error"
+                            >
+                              <p
+                                style={{
+                                  color: '#ff6b6b',
+                                  fontStyle: 'italic',
+                                }}
+                              >
                                 [Error rendering thinking content]
                               </p>
                             </div>
                           );
                         }
                       }
-                      
-                      return null;
-                    })
-                  }
 
-                  <div className="message-actions">
-                    <button
-                      type="button"
-                      className="copy-button"
-                      onClick={() =>
-                        navigator.clipboard.writeText(message.content)
-                      }
-                      title="Copy"
-                      aria-label="Copy"
-                    >
-                      <Clipboard size={16} />
-                    </button>
+                      return null;
+                    })}
+
+                    <div className="message-actions">
+                      <button
+                        type="button"
+                        className="copy-button"
+                        onClick={() =>
+                          navigator.clipboard.writeText(message.content)
+                        }
+                        title="Copy"
+                        aria-label="Copy"
+                      >
+                        <Clipboard size={16} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                message.content
-              )}
+                ) : (
+                  message.content
+                )}
               </div>
             </MessageErrorBoundary>
           );

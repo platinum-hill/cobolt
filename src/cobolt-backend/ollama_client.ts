@@ -1,14 +1,10 @@
-import { Ollama, Message, ChatResponse } from 'ollama';
+import { Ollama, Message} from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
-import { FunctionTool } from './ollama_tools';
 import * as os from 'os';
 import configStore from './data_models/config_store';
 import { addToMemory } from './memory';
 import { RequestContext, TraceLogger } from './logger';
-import { formatDateTime } from './datetime_parser';
-import { createQueryWithToolsPrompt } from './prompt_templates';
-import  { ChatHistory } from './chat_history';
 import { MODELS } from './model_manager'
 import { BrowserWindow } from 'electron';
 
@@ -302,7 +298,7 @@ async function initOllama(): Promise<boolean> {
     ollamaServerStartedByApp = true;
     const system: string = platform.toLowerCase();
     
-    if (system === 'win32') {
+    if (system === 'win32' || system === 'linux') {
       // run in the background but capture a few initial log lines
       const env = {
         ...process.env,
@@ -339,11 +335,6 @@ async function initOllama(): Promise<boolean> {
       // let the child continue independently
       child.unref();
 
-    } else if (system === 'linux') {
-      exec(
-        'set OLLAMA_FLASH_ATTENTION=1 && set OLLAMA_KV_CACHE_TYPE=q4_0 && ollama serve &',
-        logExecOutput(system)
-      );
     } else if (system === 'darwin') {
       exec('OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q4_0 brew services start ollama &',
         logExecOutput('macOS')
@@ -403,7 +394,7 @@ async function stopOllama() {
   } else if (system === 'darwin') {
     exec('brew services stop ollama', logExecOutput(system));
   } else if (system === 'linux') {
-    exec('pkill -f ollama', logExecOutput(system));
+    exec('systemctl stop ollama.service', logExecOutput(system));
   }
 }
 

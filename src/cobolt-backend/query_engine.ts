@@ -2,7 +2,7 @@ import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
 import { simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
-import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
+import { createChatPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
 import { searchMemories, addToMemory } from './memory';
 import { FunctionTool } from './ollama_tools';
 import { Message } from 'ollama';
@@ -49,9 +49,9 @@ class QueryEngine {
     cancellationToken: CancellationToken
   ): AsyncGenerator<string> {
     
-    let detectedToolCalls: any[] = [];
+    const detectedToolCalls: any[] = [];
     let hasContent = false;
-    let thinkingState: {id?: string, startTime?: number} = {};
+    const thinkingState: {id?: string, startTime?: number} = {};
     
     try {
       for await (const chunk of streamingResponse) {
@@ -325,7 +325,7 @@ class QueryEngine {
     messages.push({ role: 'user', content: requestContext.question });
     
     try {
-      let conversationMessages = [...messages];
+      const conversationMessages = [...messages];
       let conversationComplete = false;
       
       while (!conversationComplete && !cancellationToken.isCancelled) {
@@ -353,8 +353,8 @@ class QueryEngine {
         });
         
         let assistantContent = '';
-        let detectedToolCalls: any[] = [];
-        let thinkingState: {id?: string, startTime?: number} = {};
+        const detectedToolCalls: any[] = [];
+        const thinkingState: {id?: string, startTime?: number} = {};
         
         // Stream response and collect tool calls
         for await (const part of response) {
