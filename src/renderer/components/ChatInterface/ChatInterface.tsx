@@ -285,7 +285,7 @@ const processMessageContent = (content: string) => {
           contentBlocks.push({
             type: 'thinking',
             thinkingContent,
-            id: `thinking-${index}-${thinkingBlockIndex}`, // Same stable ID pattern
+            id: `thinking-${index}-${thinkingBlockIndex}`,
             isComplete: false,
           });
         }
@@ -484,16 +484,16 @@ function ChatInterface({
           }
         });
 
-        // Auto-open thinking dropdowns when thinking blocks are detected
         const thinkingBlocks = contentBlocks.filter(
           (block) => block.type === 'thinking',
         );
+        // Auto-CLOSE thinking dropdowns when thinking blocks are detected (closed by default)
         thinkingBlocks.forEach((block) => {
           const blockId = block.id;
           if (blockId && collapsedThinking[blockId] === undefined) {
             setCollapsedThinking((prev) => ({
               ...prev,
-              [blockId]: false, // false = open
+              [blockId]: true, // true = collapsed (closed by default)
             }));
           }
         });
@@ -645,6 +645,10 @@ function ChatInterface({
         const thinkingBlocks = contentBlocks.filter(
           (block) => block.type === 'thinking',
         );
+
+        // Auto close any completed thinking dropdowns
+        // This is for when you open previous chats which had thinking dropdowns
+        // This closes open and complete thinking dropdowns
         thinkingBlocks.forEach((block) => {
           if (block.id) {
             const isCompleted = block.isComplete;
@@ -665,7 +669,7 @@ function ChatInterface({
                 }));
                 // Clean up the scheduled flag
                 delete autoCollapseScheduledThinking.current[block.id!];
-              }, 2000); // 2 second delay to let user see results
+              }, 2000); // 2 second delay
             }
           }
         });
