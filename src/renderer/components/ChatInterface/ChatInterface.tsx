@@ -253,6 +253,9 @@ const processMessageContent = (content: string) => {
       // Handle thinking content - both complete and incomplete blocks
       let partProcessedContent = cleanPart;
 
+      // Handle thinking content with stable IDs (streaming and complete use same ID pattern)
+      let thinkingBlockIndex = 0;
+
       // First, handle complete thinking blocks
       const completeThinkingMatches = partProcessedContent.matchAll(
         /<think>(.*?)<\/think>/gs,
@@ -263,9 +266,10 @@ const processMessageContent = (content: string) => {
           contentBlocks.push({
             type: 'thinking',
             thinkingContent,
-            id: `thinking-complete-${index}-${match.index}`,
+            id: `thinking-${index}-${thinkingBlockIndex}`, // Stable ID - same pattern as streaming
             isComplete: true,
           });
+          thinkingBlockIndex += 1;
         }
         // Remove from content to avoid double processing
         partProcessedContent = partProcessedContent.replace(match[0], '');
@@ -281,7 +285,7 @@ const processMessageContent = (content: string) => {
           contentBlocks.push({
             type: 'thinking',
             thinkingContent,
-            id: `thinking-streaming-${index}`,
+            id: `thinking-${index}-${thinkingBlockIndex}`, // Same stable ID pattern
             isComplete: false,
           });
         }
@@ -341,6 +345,9 @@ function ChatInterface({
   const [manuallyToggledToolCalls, setManuallyToggledToolCalls] = useState<{
     [messageId: string]: { [toolIndex: number]: boolean };
   }>({});
+  const [manuallyToggledThinking, setManuallyToggledThinking] = useState<{
+    [blockId: string]: boolean;
+  }>({});
   const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});
@@ -364,8 +371,14 @@ function ChatInterface({
   const toolCallsRefs = useRef<{
     [messageId: string]: { [toolIndex: number]: HTMLDivElement | null };
   }>({});
+  const thinkingBlockRefs = useRef<{
+    [blockId: string]: HTMLDivElement | null;
+  }>({});
   const autoCollapseScheduled = useRef<{
     [messageId: string]: { [toolIndex: number]: boolean };
+  }>({});
+  const autoCollapseScheduledThinking = useRef<{
+    [blockId: string]: boolean;
   }>({});
 
   // Separate function to adjust textarea height for reuse
@@ -422,6 +435,12 @@ function ChatInterface({
     setCollapsedThinking((prev) => ({
       ...prev,
       [thinkingBlockId]: !prev[thinkingBlockId],
+    }));
+
+    // Mark this thinking block as manually toggled by user (prevents auto-collapse)
+    setManuallyToggledThinking((prev) => ({
+      ...prev,
+      [thinkingBlockId]: true,
     }));
   };
 
@@ -487,11 +506,13 @@ function ChatInterface({
     collapsedThinking,
   ]);
 
-  // Auto-scroll dropdown to bottom when tool calls update
+  // Auto-scroll dropdown to bottom when tool calls and thinking blocks update
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls } = processMessageContent(message.content);
+        const { toolCalls, contentBlocks } = processMessageContent(
+          message.content,
+        );
 
         // For each executing tool, scroll its dropdown to bottom if open
         toolCalls.forEach((toolCall, toolIndex) => {
@@ -508,9 +529,23 @@ function ChatInterface({
             }
           }
         });
+
+        // For each thinking block that's still executing, scroll its dropdown to bottom if open
+        contentBlocks
+          .filter((block) => block.type === 'thinking')
+          .forEach((block) => {
+            if (block.id && !block.isComplete && !collapsedThinking[block.id]) {
+              const thinkingContent = thinkingBlockRefs.current[block.id];
+              if (thinkingContent) {
+                setTimeout(() => {
+                  thinkingContent.scrollTop = thinkingContent.scrollHeight;
+                }, 100);
+              }
+            }
+          });
       }
     });
-  }, [messages, collapsedToolCalls]);
+  }, [messages, collapsedToolCalls, collapsedThinking]);
   // Process execution events
   useEffect(() => {
     messages.forEach((message) => {
@@ -569,7 +604,9 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls } = processMessageContent(message.content);
+        const { toolCalls, contentBlocks } = processMessageContent(
+          message.content,
+        );
 
         // For each tool call, check if it should auto-collapse
         toolCalls.forEach((toolCall, toolIndex) => {
@@ -603,9 +640,44 @@ function ChatInterface({
             }, 2000); // 2 second delay to let user see results
           }
         });
+
+        // For each thinking block, check if it should auto-collapse
+        const thinkingBlocks = contentBlocks.filter(
+          (block) => block.type === 'thinking',
+        );
+        thinkingBlocks.forEach((block) => {
+          if (block.id) {
+            const isCompleted = block.isComplete;
+            const isOpen = collapsedThinking[block.id] === false;
+            const notManuallyToggled = !manuallyToggledThinking[block.id];
+            const notScheduled =
+              !autoCollapseScheduledThinking.current[block.id];
+
+            // If dropdown is open, thinking completed, hasn't been manually toggled, and we haven't scheduled auto-collapse yet
+            if (isOpen && isCompleted && notManuallyToggled && notScheduled) {
+              // Mark as scheduled to prevent duplicate timeouts
+              autoCollapseScheduledThinking.current[block.id] = true;
+
+              setTimeout(() => {
+                setCollapsedThinking((prev) => ({
+                  ...prev,
+                  [block.id!]: true, // true = collapsed
+                }));
+                // Clean up the scheduled flag
+                delete autoCollapseScheduledThinking.current[block.id!];
+              }, 2000); // 2 second delay to let user see results
+            }
+          }
+        });
       }
     });
-  }, [messages, manuallyToggledToolCalls, collapsedToolCalls]);
+  }, [
+    messages,
+    manuallyToggledToolCalls,
+    collapsedToolCalls,
+    manuallyToggledThinking,
+    collapsedThinking,
+  ]);
 
   return (
     <div
@@ -704,19 +776,21 @@ function ChatInterface({
                                 </div>
                                 <div className="header-badges">
                                   {(() => {
-                                    const toolExecutions = Object.values(
+                                    // Get ALL tool executions for this message
+                                    const allToolExecutions = Object.values(
                                       executionState[message.id] || {},
-                                    ).filter(
-                                      (e) =>
-                                        e.type === 'tool' &&
-                                        e.name === block.toolCall.name,
-                                    );
-                                    const isExecuting = toolExecutions.some(
-                                      (e) => e.status === 'executing',
-                                    );
-                                    const completedTool = toolExecutions.find(
-                                      (e) => e.status === 'complete',
-                                    );
+                                    ).filter((e) => e.type === 'tool');
+
+                                    // Find the execution for THIS specific tool call by index
+                                    const thisToolExecution =
+                                      allToolExecutions[toolCallIndex] || null;
+
+                                    const isExecuting =
+                                      thisToolExecution?.status === 'executing';
+                                    const completedTool =
+                                      thisToolExecution?.status === 'complete'
+                                        ? thisToolExecution
+                                        : null;
 
                                     return (
                                       <>
@@ -835,6 +909,9 @@ function ChatInterface({
                                 </div>
                               </button>
                               <div
+                                ref={(el) => {
+                                  thinkingBlockRefs.current[blockId] = el;
+                                }}
                                 className={`thinking-content ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
                               >
                                 <div className="thinking-block">
