@@ -1,0 +1,72 @@
+.update-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  max-width: 400px;
+}
+
+.update-banner {
+  background: rgba(42, 47, 53, 0.95);
+  border: 1px solid rgba(124, 169, 126, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.update-banner.error {
+  border-color: rgba(229, 57, 53, 0.3);
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.update-icon {
+  font-size: 20px;
+}
+
+.update-button {
+  background: #7CA97E;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.update-button:hover {
+  background: #8FB996;
+  transform: translateY(-1px);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #7CA97E;
+  transition: width 0.3s ease;
+}
+
+.update-notification p {
+  margin: 0;
+  color: #C5D8BC;
+  font-size: 14px;
+}
