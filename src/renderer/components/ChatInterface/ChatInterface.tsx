@@ -2,7 +2,6 @@ import React, {
   useRef,
   useEffect,
   useState,
-  useCallback,
   Component,
   ErrorInfo,
   ReactNode,
@@ -129,178 +128,8 @@ interface ExecutionState {
   };
 }
 
-// === NEW CLEAN ARCHITECTURE ===
-// Execution state is completely separate from conversation content
 
-interface ToolCallExecution {
-  id: string;
-  name: string;
-  arguments: any;
-  result?: any;
-  status: 'executing' | 'complete' | 'error';
-  duration_ms?: number;
-  isError?: boolean;
-  timestamp: number;
-}
 
-interface ThinkingExecution {
-  id: string;
-  content: string;
-  status: 'executing' | 'complete';
-  duration_ms?: number;
-  timestamp: number;
-}
-
-interface MessageExecutionState {
-  messageId: string;
-  toolCalls: Map<string, ToolCallExecution>;
-  thinkingBlocks: Map<string, ThinkingExecution>;
-  events: ExecutionEvent[];
-}
-
-// Clean execution state manager - completely separate from conversation
-class ExecutionStateManager {
-  private messageStates = new Map<string, MessageExecutionState>();
-  
-  getMessageState(messageId: string): MessageExecutionState {
-    if (!this.messageStates.has(messageId)) {
-      this.messageStates.set(messageId, {
-        messageId,
-        toolCalls: new Map(),
-        thinkingBlocks: new Map(),
-        events: []
-      });
-    }
-    return this.messageStates.get(messageId)!;
-  }
-  
-  addToolStart(messageId: string, toolId: string, name: string, arguments_: any) {
-    const state = this.getMessageState(messageId);
-    const toolExecution: ToolCallExecution = {
-      id: toolId,
-      name,
-      arguments: arguments_,
-      status: 'executing',
-      timestamp: Date.now()
-    };
-    state.toolCalls.set(toolId, toolExecution);
-    
-    const event: ExecutionEvent = {
-      type: 'tool_start',
-      id: toolId,
-      name,
-      timestamp: Date.now()
-    };
-    state.events.push(event);
-  }
-  
-  addToolComplete(messageId: string, toolId: string, result: any, duration_ms?: number, isError?: boolean) {
-    const state = this.getMessageState(messageId);
-    const existing = state.toolCalls.get(toolId);
-    if (existing) {
-      const updated: ToolCallExecution = {
-        ...existing,
-        result,
-        status: isError ? 'error' : 'complete',
-        duration_ms,
-        isError
-      };
-      state.toolCalls.set(toolId, updated);
-      
-      const event: ExecutionEvent = {
-        type: 'tool_complete',
-        id: toolId,
-        name: existing.name,
-        duration_ms,
-        isError,
-        timestamp: Date.now()
-      };
-      state.events.push(event);
-    }
-  }
-  
-  addThinkingStart(messageId: string, thinkingId: string, content: string) {
-    const state = this.getMessageState(messageId);
-    const thinkingExecution: ThinkingExecution = {
-      id: thinkingId,
-      content,
-      status: 'executing',
-      timestamp: Date.now()
-    };
-    state.thinkingBlocks.set(thinkingId, thinkingExecution);
-    
-    const event: ExecutionEvent = {
-      type: 'thinking_start',
-      id: thinkingId,
-      timestamp: Date.now()
-    };
-    state.events.push(event);
-  }
-  
-  addThinkingComplete(messageId: string, thinkingId: string, content: string, duration_ms?: number) {
-    const state = this.getMessageState(messageId);
-    const existing = state.thinkingBlocks.get(thinkingId);
-    if (existing) {
-      const updated: ThinkingExecution = {
-        ...existing,
-        content,
-        status: 'complete',
-        duration_ms
-      };
-      state.thinkingBlocks.set(thinkingId, updated);
-      
-      const event: ExecutionEvent = {
-        type: 'thinking_complete',
-        id: thinkingId,
-        duration_ms,
-        timestamp: Date.now()
-      };
-      state.events.push(event);
-    }
-  }
-  
-  getAllToolCalls(messageId: string): ToolCallExecution[] {
-    const state = this.getMessageState(messageId);
-    return Array.from(state.toolCalls.values());
-  }
-  
-  getAllThinkingBlocks(messageId: string): ThinkingExecution[] {
-    const state = this.getMessageState(messageId);
-    return Array.from(state.thinkingBlocks.values());
-  }
-}
-
-// === CLEAN CONTENT PROCESSING ===
-// Completely removes ALL execution metadata from conversation content
-// This ensures AI NEVER sees execution events and can't learn to fake them
-
-function cleanConversationContent(content: string): string {
-  let cleaned = content;
-  
-  // Remove ALL execution event tags
-  cleaned = cleaned.replace(/<execution_event[^>]*>.*?<\/execution_event>/gs, '');
-  
-  // Remove ALL tool call position markers
-  cleaned = cleaned.replace(/<tool_call_position[^>]*>/g, '');
-  
-  // Remove ALL tool call update tags
-  cleaned = cleaned.replace(/<tool_calls_update[^>]*>.*?<\/tool_calls_update>/gs, '');
-  
-  // Remove ALL tool calls complete tags
-  cleaned = cleaned.replace(/<tool_calls_complete[^>]*>.*?<\/tool_calls_complete>/gs, '');
-  
-  // Remove ANY other XML tags that could leak execution metadata
-  cleaned = cleaned.replace(/<(?:tool_result|execution_state|metadata)[^>]*>.*?<\/(?:tool_result|execution_state|metadata)>/gs, '');
-  
-  // Clean up any excessive whitespace left behind
-  cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
-  cleaned = cleaned.trim();
-  
-  return cleaned;
-}
-
-// === LEGACY SUPPORT ===
-// Keep old function for backward compatibility during transition
 const processExecutionEvents = (
   content: string,
 ): { cleanContent: string; events: ExecutionEvent[] } => {
@@ -323,101 +152,7 @@ const processExecutionEvents = (
   return { cleanContent, events };
 };
 
-// === NEW CLEAN CONTENT PROCESSING ===
-// Uses clean architecture with separate execution state
-const processMessageContentClean = (
-  content: string, 
-  executionManager: ExecutionStateManager,
-  messageId: string
-) => {
-  // Step 1: Get completely clean content (what AI sees)
-  const cleanContent = cleanConversationContent(content);
-  
-  // Step 2: Get execution data from separate manager
-  const toolCalls = executionManager.getAllToolCalls(messageId);
-  const thinkingBlocks = executionManager.getAllThinkingBlocks(messageId);
-  
-  // Step 3: Process clean content into blocks (no execution metadata)
-  const contentBlocks: Array<{
-    type: 'text' | 'tool_call' | 'thinking';
-    content?: string;
-    toolCall?: any;
-    thinkingContent?: string;
-    id?: string;
-    isComplete?: boolean;
-    thinkingBlockIndex?: number;
-  }> = [];
-  
-  // Step 4: Parse clean content for text and thinking blocks
-  const parts = cleanContent.split(/(<think>.*?<\/think>|<think>.*?$)/gs);
-  
-  let globalThinkingIndex = 0;
-  
-  parts.forEach((part, index) => {
-    if (part.trim()) {
-      // Handle thinking blocks
-      const completeThinkingMatch = part.match(/<think>(.*?)<\/think>/s);
-      const incompleteThinkingMatch = part.match(/<think>(.*?)$/s);
-      
-      if (completeThinkingMatch || incompleteThinkingMatch) {
-        const thinkingContent = (completeThinkingMatch || incompleteThinkingMatch)?.[1] || '';
-        const isComplete = !!completeThinkingMatch;
-        
-        if (thinkingContent.trim()) {
-          contentBlocks.push({
-            type: 'thinking',
-            thinkingContent,
-            id: `thinking-clean-${globalThinkingIndex}`,
-            isComplete,
-            thinkingBlockIndex: globalThinkingIndex,
-          });
-          globalThinkingIndex += 1;
-        }
-      } else {
-        // Handle regular text content
-        if (part.trim()) {
-          contentBlocks.push({
-            type: 'text',
-            content: part.trim(),
-            id: `text-clean-${index}`,
-          });
-        }
-      }
-    }
-  });
-  
-  // Step 5: Add tool calls from execution manager (positioned appropriately)
-  toolCalls.forEach((toolCall, index) => {
-    contentBlocks.push({
-      type: 'tool_call',
-      toolCall: {
-        name: toolCall.name,
-        arguments: typeof toolCall.arguments === 'string' ? toolCall.arguments : JSON.stringify(toolCall.arguments, null, 2),
-        result: toolCall.result || (toolCall.status === 'executing' ? 'Executing...' : 'Completed'),
-        isExecuting: toolCall.status === 'executing',
-        duration_ms: toolCall.duration_ms,
-        isError: toolCall.isError,
-        blockIndex: index,
-        executionId: toolCall.id // Store execution ID for mapping
-      },
-      id: `tool-clean-${index}`,
-    });
-  });
-  
-  return {
-    contentBlocks,
-    toolCalls: toolCalls.map(tc => tc), // Convert to legacy format if needed
-    thinkingBlocks: thinkingBlocks.map(tb => tb.content),
-    regularContent: contentBlocks
-      .filter(block => block.type === 'text')
-      .map(block => block.content || '')
-      .join(''),
-    cleanConversationContent: cleanContent // What AI actually sees
-  };
-};
-
-// === LEGACY CONTENT PROCESSING ===
-// Keep old function for backward compatibility
+// Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
   // Clean execution events from content first and extract events
   // NEW: Create immediate tool call dropdowns from execution events for better UX
@@ -795,7 +530,7 @@ function ChatInterface({
     [messageId: string]: ExecutionState;
   }>({});
   
-  // Clean architecture now handled in backend - UI uses original content for proper display
+
   
 
   const {
@@ -1070,22 +805,13 @@ function ChatInterface({
           // Check execution state for more accurate status
           const messageExecutions = executionState[message.id] || {};
           
-          // Try to find by execution event ID first
-          let thisToolExecution = null;
-          if (toolCall.executionEventId) {
-            thisToolExecution = messageExecutions[toolCall.executionEventId];
-          }
+          // Get execution state by event ID
+          const thisToolExecution = toolCall.executionEventId 
+            ? messageExecutions[toolCall.executionEventId] 
+            : null;
           
-          // Fallback to index-based lookup
-          if (!thisToolExecution) {
-            const allToolExecutions = Object.values(messageExecutions).filter((e) => e.type === 'tool');
-            thisToolExecution = allToolExecutions[toolIndex] || null;
-          }
-          
-          // Use execution state if available, fallback to tool call data
-          const isCompleted = thisToolExecution 
-            ? thisToolExecution.status === 'complete'
-            : !toolCall.isExecuting;
+          // Use execution state for completion status
+          const isCompleted = thisToolExecution?.status === 'complete';
           
           const isOpen = collapsedToolCalls[message.id]?.[toolIndex] === false;
           const notManuallyToggled =
@@ -1170,8 +896,9 @@ function ChatInterface({
 
       <div className="messages-container">
         {messages.map((message) => {
-          // UI always uses original content to show tool calls to users
-          const { contentBlocks, toolCalls } = processMessageContent(message.content);
+          const { contentBlocks, toolCalls } = processMessageContent(
+            message.content,
+          );
 
           return (
             <MessageErrorBoundary key={message.id} messageId={message.id}>
@@ -1255,33 +982,20 @@ function ChatInterface({
                                     // Get execution state for this specific tool call
                                     const messageExecutions = executionState[message.id] || {};
                                     
-                                    // Try to find execution by event ID first (for event-created blocks)
-                                    let thisToolExecution = null;
-                                    if (block.toolCall.executionEventId) {
-                                      thisToolExecution = messageExecutions[block.toolCall.executionEventId];
-                                    }
-                                    
-                                    // Fallback: find by tool name and index (for content-created blocks)
-                                    if (!thisToolExecution) {
-                                      const allToolExecutions = Object.values(messageExecutions)
-                                        .filter((e) => e.type === 'tool');
-                                      thisToolExecution = allToolExecutions[toolCallIndex] || null;
-                                    }
+                                    // Get execution state by event ID
+                                    const thisToolExecution = block.toolCall.executionEventId 
+                                      ? messageExecutions[block.toolCall.executionEventId] 
+                                      : null;
 
-                                    const isExecuting =
-                                      thisToolExecution?.status === 'executing' || 
-                                      block.toolCall.isExecuting;
+                                    const isExecuting = thisToolExecution?.status === 'executing';
                                     const completedTool =
                                       thisToolExecution?.status === 'complete'
                                         ? thisToolExecution
                                         : null;
                                     
-                                    // Check for errors in execution state OR tool call data
-                                    const hasError = thisToolExecution?.isError || block.toolCall.isError;
-
                                     return (
                                       <>
-                                        {hasError && (
+                                        {completedTool?.isError && (
                                           <span className="error-badge">
                                             Error
                                           </span>
@@ -1344,9 +1058,9 @@ function ChatInterface({
                           const safeThinkingContent = safeStringify(
                             block.thinkingContent || '',
                           );
-                          // Use the block's ID, with a fallback that includes thinking index for uniqueness
+                          // Use block ID and thinking index
                           const blockThinkingIndex = block.thinkingBlockIndex ?? 0;
-                          const blockId = block.id || `thinking-fallback-global-${blockThinkingIndex}`;
+                          const blockId = block.id || `thinking-${blockThinkingIndex}`;
 
                           // Find execution state for THIS specific thinking block
                           const allThinkingExecutions = Object.values(
@@ -1356,9 +1070,7 @@ function ChatInterface({
                           // Use the stable thinking block index if available
                           const thisBlockExecution = allThinkingExecutions[blockThinkingIndex] || null;
 
-                          const isThinking =
-                            thisBlockExecution?.status === 'executing' ||
-                            !block.isComplete;
+                          const isThinking = thisBlockExecution?.status === 'executing';
                           const isCompleted =
                             thisBlockExecution?.status === 'complete';
 
