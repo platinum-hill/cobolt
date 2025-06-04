@@ -4,18 +4,19 @@ import log from 'electron-log/main';
 
 export class AppUpdater {
   private mainWindow: BrowserWindow | null = null;
+  private isCheckingUpdate = false;
+  private checkPromise: Promise<any> | null = null;
 
   constructor() {
-    log.info('[AppUpdater] Initializing auto-updater');
+    log.info('[AppUpdater] Initializing');
     
     // Configure auto-updater
     autoUpdater.logger = log;
-    autoUpdater.autoDownload = false; // Manual download control
+    autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
-    // Set the feed URL explicitly for GitHub
+    // Set the feed URL for GitHub
     if (!autoUpdater.getFeedURL()) {
-      log.info('[AppUpdater] No feed URL set, configuring GitHub provider');
       autoUpdater.setFeedURL({
         provider: 'github',
         owner: 'platinum-hill',
@@ -23,120 +24,128 @@ export class AppUpdater {
       });
     }
 
-    // Log the feed URL
-    log.info('[AppUpdater] Feed URL:', JSON.stringify(autoUpdater.getFeedURL()));
-    log.info('[AppUpdater] App version:', app.getVersion());
-    log.info('[AppUpdater] Is packaged:', app.isPackaged);
+    // Log configuration
+    log.info(`[AppUpdater] Version: ${app.getVersion()}, Packaged: ${app.isPackaged}`);
 
-    // Set up event handlers
+    // Set up handlers
     this.setupEventHandlers();
     this.setupIpcHandlers();
-    
-    log.info('[AppUpdater] Auto-updater initialized successfully');
   }
 
   setMainWindow(window: BrowserWindow) {
-    log.info('[AppUpdater] Setting main window');
     this.mainWindow = window;
   }
 
   private setupEventHandlers() {
     autoUpdater.on('checking-for-update', () => {
-      log.info('[AppUpdater] Event: checking-for-update');
+      log.info('[AppUpdater] Checking for update');
       this.sendStatusToWindow('checking');
     });
 
     autoUpdater.on('update-available', (info) => {
-      log.info('[AppUpdater] Event: update-available', JSON.stringify(info));
+      log.info(`[AppUpdater] Update available: v${info.version}`);
+      this.isCheckingUpdate = false;
+      this.checkPromise = null;
       this.sendStatusToWindow('available', info);
     });
 
     autoUpdater.on('update-not-available', (info) => {
-      log.info('[AppUpdater] Event: update-not-available', JSON.stringify(info));
+      log.info(`[AppUpdater] No update available (current: v${app.getVersion()})`);
+      this.isCheckingUpdate = false;
+      this.checkPromise = null;
       this.sendStatusToWindow('not-available', info);
     });
 
     autoUpdater.on('error', (err) => {
-      log.error('[AppUpdater] Event: error', err.message, err.stack);
+      log.error('[AppUpdater] Error:', err.message);
+      this.isCheckingUpdate = false;
+      this.checkPromise = null;
       this.sendStatusToWindow('error', null, err.message);
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
-      log.info('[AppUpdater] Event: download-progress', `${progressObj.percent}%`);
+      log.debug(`[AppUpdater] Download progress: ${progressObj.percent.toFixed(1)}%`);
       this.sendStatusToWindow('downloading', undefined, undefined, progressObj);
     });
 
     autoUpdater.on('update-downloaded', (info) => {
-      log.info('[AppUpdater] Event: update-downloaded', JSON.stringify(info));
+      log.info(`[AppUpdater] Update downloaded: v${info.version}`);
       this.sendStatusToWindow('downloaded', info);
     });
   }
 
   private setupIpcHandlers() {
     ipcMain.handle('check-for-updates', async () => {
-      log.info('[AppUpdater] IPC: check-for-updates called');
-      
-      // In development, return a mock response
       if (!app.isPackaged) {
-        log.info('[AppUpdater] Running in development mode, returning mock response');
+        log.debug('[AppUpdater] Skipping update check in development');
         this.sendStatusToWindow('not-available', { version: app.getVersion() });
         return { 
           success: true, 
           updateInfo: null,
-          message: 'Updates can only be checked in packaged app' 
+          message: 'Updates only available in packaged app' 
         };
+      }
+
+      // If already checking, return the existing promise
+      if (this.isCheckingUpdate && this.checkPromise) {
+        log.debug('[AppUpdater] Update check already in progress, waiting for result');
+        try {
+          const result = await this.checkPromise;
+          return { success: true, updateInfo: result?.updateInfo };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
       }
       
       try {
-        log.info('[AppUpdater] Calling autoUpdater.checkForUpdatesAndNotify()');
-        const result = await autoUpdater.checkForUpdatesAndNotify();
-        log.info('[AppUpdater] Check for updates result:', JSON.stringify(result));
+        this.isCheckingUpdate = true;
+        this.checkPromise = autoUpdater.checkForUpdatesAndNotify();
+        const result = await this.checkPromise;
         return { success: true, updateInfo: result?.updateInfo };
       } catch (error) {
-        log.error('[AppUpdater] Check for updates error:', error);
+        log.error('[AppUpdater] Check failed:', error);
         this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
         return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      } finally {
+        this.isCheckingUpdate = false;
+        this.checkPromise = null;
       }
     });
 
     ipcMain.handle('download-update', async () => {
-      log.info('[AppUpdater] IPC: download-update called');
       try {
         await autoUpdater.downloadUpdate();
-        log.info('[AppUpdater] Download initiated successfully');
+        log.info('[AppUpdater] Download started');
         return { success: true };
       } catch (error) {
-        log.error('[AppUpdater] Download update error:', error);
+        log.error('[AppUpdater] Download failed:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
       }
     });
 
     ipcMain.handle('install-update', () => {
-      log.info('[AppUpdater] IPC: install-update called');
+      log.info('[AppUpdater] Installing update and restarting');
       autoUpdater.quitAndInstall(false, true);
       return { success: true };
     });
 
     ipcMain.handle('get-update-status', async () => {
-      log.info('[AppUpdater] IPC: get-update-status called');
       try {
-        const result = await autoUpdater.checkForUpdates();
-        log.info('[AppUpdater] Update status result:', JSON.stringify(result));
+        // Don't trigger a new check, just return cached status
+        const currentVersion = app.getVersion();
         return {
-          updateAvailable: result?.updateInfo ? true : false,
-          updateInfo: result?.updateInfo
+          updateAvailable: false,
+          currentVersion,
+          isChecking: this.isCheckingUpdate
         };
       } catch (error) {
-        log.error('[AppUpdater] Get update status error:', error);
-        return { updateAvailable: false };
+        log.error('[AppUpdater] Status check failed:', error);
+        return { updateAvailable: false, currentVersion: app.getVersion() };
       }
     });
-
-    // Remove the test-updater handler
   }
 
   private sendStatusToWindow(status: string, info?: any, error?: string, progress?: any) {
-    log.info('[AppUpdater] Sending status to window:', status, info ? 'with info' : 'no info');
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
         status,
@@ -144,25 +153,26 @@ export class AppUpdater {
         error,
         progress
       });
-      log.info('[AppUpdater] Status sent successfully');
-    } else {
-      log.warn('[AppUpdater] Cannot send status - window is null or destroyed');
     }
   }
 
   checkForUpdatesOnStartup() {
-    log.info('[AppUpdater] Scheduling startup update check');
-    // Check for updates 3 seconds after startup
+    if (!app.isPackaged) {
+      log.debug('[AppUpdater] Skipping startup check in development');
+      return;
+    }
+
+    // Check for updates 10 seconds after startup to avoid conflicts
     setTimeout(() => {
-      log.info('[AppUpdater] Performing startup update check');
+      log.info('[AppUpdater] Running startup update check');
       autoUpdater.checkForUpdates().catch(err => {
-        log.error('[AppUpdater] Auto update check failed:', err);
+        log.error('[AppUpdater] Startup check failed:', err.message);
       });
-    }, 3000);
+    }, 10000);
   }
 
   checkForUpdatesManually() {
-    log.info('[AppUpdater] Manual update check triggered');
+    log.info('[AppUpdater] Manual check triggered');
     autoUpdater.checkForUpdates();
   }
 }
