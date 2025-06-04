@@ -64,11 +64,26 @@ function initMemory(): void {
  * Adds messages to the memory store
  * @param messages Array of messages to add to memory
  */
+/* og
 async function addToMemory(messages: Message[]): Promise<void> {
     if (!memoryEnabled) {
       return;
     }
     await memory?.add(messages, {userId: "userid"});
+}
+*/
+async function addToMemory(messages: Message[]): Promise<void> {
+    if (!memoryEnabled) {
+      return;
+    }
+        
+    try {
+      const result = await memory?.add(messages, {userId: "userid"});
+      console.log('[Memory] SUCCESS memory.add() result:', result);
+    } catch (error) {
+      console.error('[Memory] Memory storage FAILED:', error);
+      throw error;
+    }
 }
 
 /**
