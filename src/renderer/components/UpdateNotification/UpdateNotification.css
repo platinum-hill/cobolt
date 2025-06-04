@@ -2,8 +2,25 @@
   position: fixed;
   top: 20px;
   right: 20px;
+  background-color: #2A2F35;
+  border: 1px solid #7CA97E;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 1000;
+  animation: slideIn 0.3s ease-out;
   max-width: 400px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .update-banner {
@@ -27,7 +44,34 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  color: #C5D8BC;
   flex: 1;
+}
+
+.update-content.checking,
+.update-content.downloading {
+  color: #8FB996;
+}
+
+.update-content.up-to-date {
+  color: #7CA97E;
+}
+
+.update-content.error {
+  color: #E53935;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #8FB996;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .update-icon {
@@ -35,25 +79,39 @@
 }
 
 .update-button {
-  background: #7CA97E;
-  color: white;
+  padding: 6px 16px;
+  background-color: #7CA97E;
+  color: #1E2329;
   border: none;
-  padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
+  font-weight: 500;
+  transition: background-color 0.2s;
 }
 
 .update-button:hover {
-  background: #8FB996;
-  transform: translateY(-1px);
+  background-color: #8FB996;
+}
+
+.dismiss-button {
+  padding: 6px 12px;
+  background-color: transparent;
+  color: #8A9BA8;
+  border: 1px solid #3A424A;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dismiss-button:hover {
+  border-color: #8A9BA8;
+  color: #C5D8BC;
 }
 
 .progress-bar {
-  width: 100%;
+  width: 100px;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background-color: #3A424A;
   border-radius: 3px;
   overflow: hidden;
   margin-top: 12px;
@@ -61,12 +119,36 @@
 
 .progress-fill {
   height: 100%;
-  background: #7CA97E;
+  background-color: #7CA97E;
   transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #8A9BA8;
+}
+
+.error-detail {
+  font-size: 12px;
+  color: #8A9BA8;
+  display: block;
+  margin-top: 4px;
 }
 
 .update-notification p {
   margin: 0;
   color: #C5D8BC;
   font-size: 14px;
+}
+
+/* Auto-hide animation for up-to-date notification */
+.update-notification.not-available {
+  animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-out 2.5s forwards;
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
 }

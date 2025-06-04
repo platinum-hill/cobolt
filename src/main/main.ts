@@ -673,6 +673,11 @@ ipcMain.handle('refresh-mcp-connections', async () => {
   }
 });
 
+// Add this with other IPC handlers (around line 450-500)
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // Global error handlers
 process.on('uncaughtException', (error) => {
   showErrorDialog('Unexpected Error', error);
