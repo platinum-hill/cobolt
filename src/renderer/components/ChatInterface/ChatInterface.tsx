@@ -128,8 +128,6 @@ interface ExecutionState {
   };
 }
 
-
-
 const processExecutionEvents = (
   content: string,
 ): { cleanContent: string; events: ExecutionEvent[] } => {
@@ -172,7 +170,7 @@ const processMessageContent = (content: string) => {
   // Store immediate tool call data from execution events (don't add to contentBlocks yet)
   const executionEventBlocks = new Map<string, any>();
   const eventIdsByToolName = new Map<string, string>();
-  
+
   events.forEach((event) => {
     if (event.type === 'tool_start') {
       const immediateToolCall = {
@@ -182,9 +180,9 @@ const processMessageContent = (content: string) => {
         isExecuting: true,
         duration_ms: undefined,
         isError: false,
-        executionEventId: event.id // Store the event ID for badge mapping
+        executionEventId: event.id, // Store the event ID for badge mapping
       };
-      
+
       executionEventBlocks.set(event.name || 'unknown', immediateToolCall);
       eventIdsByToolName.set(event.name || 'unknown', event.id);
     }
@@ -202,7 +200,7 @@ const processMessageContent = (content: string) => {
       const updateToolCalls = JSON.parse(match[1]);
       updateToolCalls.forEach((updateTool: any) => {
         const key = `${updateTool.name}-${updateTool.arguments}`;
-        
+
         // Check if we already have a block from execution events
         const existingEventBlock = executionEventBlocks.get(updateTool.name);
         if (existingEventBlock) {
@@ -211,11 +209,11 @@ const processMessageContent = (content: string) => {
             ...existingEventBlock,
             arguments: JSON.stringify(updateTool.arguments, null, 2),
             result: updateTool.result || 'Executing...',
-            isExecuting: updateTool.isExecuting !== false
+            isExecuting: updateTool.isExecuting !== false,
           };
           executionEventBlocks.set(updateTool.name, updatedEventBlock);
         }
-        
+
         toolCallsMap.set(key, updateTool);
       });
     } catch (error) {
@@ -233,7 +231,7 @@ const processMessageContent = (content: string) => {
       completedToolCalls.forEach((completedTool: any) => {
         const key = `${completedTool.name}-${completedTool.arguments}`;
         const existingTool = toolCallsMap.get(key);
-        
+
         // Also update the execution event block if it exists
         const existingEventBlock = executionEventBlocks.get(completedTool.name);
         if (existingEventBlock) {
@@ -244,11 +242,11 @@ const processMessageContent = (content: string) => {
             result: completedTool.result || 'Completed',
             isExecuting: false,
             duration_ms: completedTool.duration_ms,
-            isError: completedTool.isError || false
+            isError: completedTool.isError || false,
           };
           executionEventBlocks.set(completedTool.name, completedEventBlock);
         }
-        
+
         toolCallsMap.set(key, {
           ...existingTool,
           ...completedTool,
@@ -291,28 +289,31 @@ const processMessageContent = (content: string) => {
   parts.forEach((part, index) => {
     if (part.startsWith('<tool_call_position')) {
       // Insert tool call at this exact position
-      
-      // First check if we have execution event data for the next expected tool
-      const toolCallsArray = Array.from(toolCallsMap.values());
-      
+
       // Try to find execution event block for this position
       let toolCallToUse = null;
       let toolFromEvents = false;
-      
+
       if (currentToolCallIndex < toolCallsArray.length) {
         const contentToolCall = toolCallsArray[currentToolCallIndex];
         const eventBlock = executionEventBlocks.get(contentToolCall.name);
-        
+
         if (eventBlock) {
           // Create a COPY of execution event block to avoid shared references
           toolCallToUse = {
             ...eventBlock, // Spread to create new object
             arguments: contentToolCall.arguments || eventBlock.arguments,
             result: contentToolCall.result || eventBlock.result,
-            isExecuting: contentToolCall.isExecuting !== undefined ? contentToolCall.isExecuting : eventBlock.isExecuting,
+            isExecuting:
+              contentToolCall.isExecuting !== undefined
+                ? contentToolCall.isExecuting
+                : eventBlock.isExecuting,
             duration_ms: contentToolCall.duration_ms || eventBlock.duration_ms,
-            isError: contentToolCall.isError !== undefined ? contentToolCall.isError : eventBlock.isError,
-            executionEventId: eventBlock.executionEventId // Preserve event ID for badge mapping
+            isError:
+              contentToolCall.isError !== undefined
+                ? contentToolCall.isError
+                : eventBlock.isError,
+            executionEventId: eventBlock.executionEventId, // Preserve event ID for badge mapping
           };
           toolFromEvents = true;
         } else {
@@ -320,25 +321,29 @@ const processMessageContent = (content: string) => {
         }
       } else {
         // No content tool call yet, check if we have any unused execution event blocks
-        const unusedEventBlocks = Array.from(executionEventBlocks.values()).filter(block => 
-          !toolCallsArray.some(tc => tc.name === block.name)
+        const unusedEventBlocks = Array.from(
+          executionEventBlocks.values(),
+        ).filter(
+          (block) => !toolCallsArray.some((tc) => tc.name === block.name),
         );
-        
+
         if (unusedEventBlocks.length > 0) {
           // Create COPY to avoid shared reference issues
           toolCallToUse = { ...unusedEventBlocks[0] };
           toolFromEvents = true;
         }
       }
-      
+
       if (toolCallToUse) {
         contentBlocks.push({
           type: 'tool_call',
           toolCall: {
             ...toolCallToUse,
-            blockIndex: currentToolCallIndex // Store the intended index
+            blockIndex: currentToolCallIndex, // Store the intended index
           },
-          id: toolFromEvents ? `tool-event-${currentToolCallIndex}` : `tool-${currentToolCallIndex}`,
+          id: toolFromEvents
+            ? `tool-event-${currentToolCallIndex}`
+            : `tool-${currentToolCallIndex}`,
         });
         currentToolCallIndex += 1;
       }
@@ -410,7 +415,7 @@ const processMessageContent = (content: string) => {
   // First add remaining content-parsed tool calls
   while (currentToolCallIndex < toolCallsArray.length) {
     const toolCall = toolCallsArray[currentToolCallIndex];
-    
+
     // Check if we already have this tool call from execution events
     const existingEventBlock = executionEventBlocks.get(toolCall.name);
     if (existingEventBlock) {
@@ -419,17 +424,23 @@ const processMessageContent = (content: string) => {
         ...existingEventBlock, // Spread creates new object
         arguments: toolCall.arguments || existingEventBlock.arguments,
         result: toolCall.result || existingEventBlock.result,
-        isExecuting: toolCall.isExecuting !== undefined ? toolCall.isExecuting : existingEventBlock.isExecuting,
+        isExecuting:
+          toolCall.isExecuting !== undefined
+            ? toolCall.isExecuting
+            : existingEventBlock.isExecuting,
         duration_ms: toolCall.duration_ms || existingEventBlock.duration_ms,
-        isError: toolCall.isError !== undefined ? toolCall.isError : existingEventBlock.isError,
-        executionEventId: existingEventBlock.executionEventId // Preserve event ID
+        isError:
+          toolCall.isError !== undefined
+            ? toolCall.isError
+            : existingEventBlock.isError,
+        executionEventId: existingEventBlock.executionEventId, // Preserve event ID
       };
-      
+
       contentBlocks.push({
         type: 'tool_call',
         toolCall: {
           ...mergedToolCall,
-          blockIndex: currentToolCallIndex
+          blockIndex: currentToolCallIndex,
         },
         id: `tool-merged-${currentToolCallIndex}`,
       });
@@ -439,45 +450,47 @@ const processMessageContent = (content: string) => {
         type: 'tool_call',
         toolCall: {
           ...toolCall,
-          blockIndex: currentToolCallIndex
+          blockIndex: currentToolCallIndex,
         },
         id: `tool-remaining-${currentToolCallIndex}`,
       });
     }
     currentToolCallIndex += 1;
   }
-  
+
   // Then add any execution event blocks that weren't matched with content
   const usedEventBlockNames = new Set(
     contentBlocks
-      .filter(block => block.type === 'tool_call')
-      .map(block => block.toolCall?.name)
-      .filter(Boolean)
+      .filter((block) => block.type === 'tool_call')
+      .map((block) => block.toolCall?.name)
+      .filter(Boolean),
   );
-  
-  Array.from(executionEventBlocks.entries()).forEach(([name, eventBlock], orphanIndex) => {
-    if (!usedEventBlockNames.has(name)) {
-      contentBlocks.push({
-        type: 'tool_call',
-        toolCall: {
-          ...eventBlock, // Create copy to avoid shared references
-          blockIndex: currentToolCallIndex + orphanIndex
-        },
-        id: `tool-event-orphan-${name}`,
-      });
-    }
-  });
+
+  Array.from(executionEventBlocks.entries()).forEach(
+    ([name, eventBlock], orphanIndex) => {
+      if (!usedEventBlockNames.has(name)) {
+        contentBlocks.push({
+          type: 'tool_call',
+          toolCall: {
+            ...eventBlock, // Create copy to avoid shared references
+            blockIndex: currentToolCallIndex + orphanIndex,
+          },
+          id: `tool-event-orphan-${name}`,
+        });
+      }
+    },
+  );
 
   // Return properly ordered content blocks
   // Merge tool calls from both content parsing and execution events
   const allToolCalls = [
     ...Array.from(toolCallsMap.values()),
-    ...Array.from(executionEventBlocks.values())
+    ...Array.from(executionEventBlocks.values()),
   ];
-  
+
   // Remove duplicates by tool name (prefer content-parsed versions)
   const uniqueToolCalls = allToolCalls.reduce((acc, toolCall) => {
-    const existing = acc.find(tc => tc.name === toolCall.name);
+    const existing = acc.find((tc: any) => tc.name === toolCall.name);
     if (!existing) {
       // Create COPY to avoid shared references
       acc.push({ ...toolCall });
@@ -486,16 +499,21 @@ const processMessageContent = (content: string) => {
       const preservedIsExecuting = existing.isExecuting;
       const mergedToolCall = { ...existing, ...toolCall };
       // If the new tool call doesn't have isExecuting set, preserve the old value
-      if (toolCall.isExecuting === undefined && preservedIsExecuting !== undefined) {
+      if (
+        toolCall.isExecuting === undefined &&
+        preservedIsExecuting !== undefined
+      ) {
         mergedToolCall.isExecuting = preservedIsExecuting;
       }
       // Replace the existing with the merged copy
-      const existingIndex = acc.findIndex(tc => tc.name === toolCall.name);
+      const existingIndex = acc.findIndex(
+        (tc: any) => tc.name === toolCall.name,
+      );
       acc[existingIndex] = mergedToolCall;
     }
     return acc;
   }, [] as any[]);
-  
+
   return {
     contentBlocks,
     toolCalls: uniqueToolCalls,
@@ -529,9 +547,6 @@ function ChatInterface({
   const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});
-  
-
-  
 
   const {
     messages,
@@ -649,12 +664,12 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls, contentBlocks } = processMessageContent(
-          message.content,
-        );
+        const { contentBlocks } = processMessageContent(message.content);
 
         // For each tool call block, if dropdown isn't explicitly set, open it
-        const toolCallBlocks = contentBlocks.filter(block => block.type === 'tool_call');
+        const toolCallBlocks = contentBlocks.filter(
+          (block) => block.type === 'tool_call',
+        );
         toolCallBlocks.forEach((block) => {
           const toolIndex = block.toolCall?.blockIndex ?? 0;
           if (collapsedToolCalls[message.id]?.[toolIndex] === undefined) {
@@ -694,16 +709,16 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls, contentBlocks } = processMessageContent(
-          message.content,
-        );
+        const { contentBlocks } = processMessageContent(message.content);
 
         // For each executing tool, scroll its dropdown to bottom if open
-        const toolCallBlocks = contentBlocks.filter(block => block.type === 'tool_call');
+        const toolCallBlocks = contentBlocks.filter(
+          (block) => block.type === 'tool_call',
+        );
         toolCallBlocks.forEach((block) => {
           const toolIndex = block.toolCall?.blockIndex ?? 0;
-          const toolCall = block.toolCall;
-          
+          const { toolCall } = block;
+
           if (
             toolCall.isExecuting &&
             collapsedToolCalls[message.id]?.[toolIndex] === false
@@ -792,27 +807,27 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { toolCalls, contentBlocks } = processMessageContent(
-          message.content,
-        );
+        const { contentBlocks } = processMessageContent(message.content);
 
         // For each tool call block, check if it should auto-collapse
-        const toolCallBlocks = contentBlocks.filter(block => block.type === 'tool_call');
+        const toolCallBlocks = contentBlocks.filter(
+          (block) => block.type === 'tool_call',
+        );
         toolCallBlocks.forEach((block) => {
           const toolIndex = block.toolCall?.blockIndex ?? 0;
-          const toolCall = block.toolCall;
-          
+          const { toolCall } = block;
+
           // Check execution state for more accurate status
           const messageExecutions = executionState[message.id] || {};
-          
+
           // Get execution state by event ID
-          const thisToolExecution = toolCall.executionEventId 
-            ? messageExecutions[toolCall.executionEventId] 
+          const thisToolExecution = toolCall.executionEventId
+            ? messageExecutions[toolCall.executionEventId]
             : null;
-          
+
           // Use execution state for completion status
           const isCompleted = thisToolExecution?.status === 'complete';
-          
+
           const isOpen = collapsedToolCalls[message.id]?.[toolIndex] === false;
           const notManuallyToggled =
             !manuallyToggledToolCalls[message.id]?.[toolIndex];
@@ -896,9 +911,7 @@ function ChatInterface({
 
       <div className="messages-container">
         {messages.map((message) => {
-          const { contentBlocks, toolCalls } = processMessageContent(
-            message.content,
-          );
+          const { contentBlocks } = processMessageContent(message.content);
 
           return (
             <MessageErrorBoundary key={message.id} messageId={message.id}>
@@ -980,19 +993,24 @@ function ChatInterface({
                                 <div className="header-badges">
                                   {(() => {
                                     // Get execution state for this specific tool call
-                                    const messageExecutions = executionState[message.id] || {};
-                                    
+                                    const messageExecutions =
+                                      executionState[message.id] || {};
+
                                     // Get execution state by event ID
-                                    const thisToolExecution = block.toolCall.executionEventId 
-                                      ? messageExecutions[block.toolCall.executionEventId] 
+                                    const thisToolExecution = block.toolCall
+                                      .executionEventId
+                                      ? messageExecutions[
+                                          block.toolCall.executionEventId
+                                        ]
                                       : null;
 
-                                    const isExecuting = thisToolExecution?.status === 'executing';
+                                    const isExecuting =
+                                      thisToolExecution?.status === 'executing';
                                     const completedTool =
                                       thisToolExecution?.status === 'complete'
                                         ? thisToolExecution
                                         : null;
-                                    
+
                                     return (
                                       <>
                                         {completedTool?.isError && (
@@ -1059,18 +1077,22 @@ function ChatInterface({
                             block.thinkingContent || '',
                           );
                           // Use block ID and thinking index
-                          const blockThinkingIndex = block.thinkingBlockIndex ?? 0;
-                          const blockId = block.id || `thinking-${blockThinkingIndex}`;
+                          const blockThinkingIndex =
+                            block.thinkingBlockIndex ?? 0;
+                          const blockId =
+                            block.id || `thinking-${blockThinkingIndex}`;
 
                           // Find execution state for THIS specific thinking block
                           const allThinkingExecutions = Object.values(
                             executionState[message.id] || {},
                           ).filter((e) => e.type === 'thinking');
-                          
-                          // Use the stable thinking block index if available
-                          const thisBlockExecution = allThinkingExecutions[blockThinkingIndex] || null;
 
-                          const isThinking = thisBlockExecution?.status === 'executing';
+                          // Use the stable thinking block index if available
+                          const thisBlockExecution =
+                            allThinkingExecutions[blockThinkingIndex] || null;
+
+                          const isThinking =
+                            thisBlockExecution?.status === 'executing';
                           const isCompleted =
                             thisBlockExecution?.status === 'complete';
 
