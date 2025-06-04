@@ -56,13 +56,43 @@ class ChatHistory {
 
   /**
    * Convert chat history to format used by Ollama LLM
-   * @returns Array of Message objects in Ollama format
+   * CLEAN ARCHITECTURE: Removes execution metadata from AI context
+   * @returns Array of Message objects in Ollama format with clean content
    */
   toOllamaMessages(): Message[] {
     return this.messages.map(message => ({
       role: message.role,
-      content: message.content
+      content: this.cleanContentForAI(message.content)
     }));
+  }
+
+  /**
+   * Clean content for AI context - removes ALL execution metadata
+   * This prevents AI from learning fake execution patterns
+   */
+  private cleanContentForAI(content: string): string {
+    let cleaned = content;
+    
+    // Remove ALL execution event tags
+    cleaned = cleaned.replace(/<execution_event[^>]*>.*?<\/execution_event>/gs, '');
+    
+    // Remove ALL tool call position markers
+    cleaned = cleaned.replace(/<tool_call_position[^>]*>/g, '');
+    
+    // Remove ALL tool call update tags
+    cleaned = cleaned.replace(/<tool_calls_update[^>]*>.*?<\/tool_calls_update>/gs, '');
+    
+    // Remove ALL tool calls complete tags
+    cleaned = cleaned.replace(/<tool_calls_complete[^>]*>.*?<\/tool_calls_complete>/gs, '');
+    
+    // Remove ANY other XML tags that could leak execution metadata
+    cleaned = cleaned.replace(/<(?:tool_result|execution_state|metadata)[^>]*>.*?<\/(?:tool_result|execution_state|metadata)>/gs, '');
+    
+    // Clean up any excessive whitespace left behind
+    cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+    cleaned = cleaned.trim();
+    
+    return cleaned;
   }
 
   /**
