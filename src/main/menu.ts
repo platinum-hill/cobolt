@@ -5,7 +5,9 @@ import {
   BrowserWindow,
   MenuItemConstructorOptions,
 } from 'electron';
+import log from 'electron-log/main';
 
+// Extend the MenuItemConstructorOptions type for macOS-specific properties
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
   selector?: string;
   submenu?: DarwinMenuItemConstructorOptions[] | Menu;
@@ -54,17 +56,17 @@ export default class MenuBuilder {
 
   buildDarwinTemplate(): MenuItemConstructorOptions[] {
     const subMenuAbout: DarwinMenuItemConstructorOptions = {
-      label: 'Electron',
+      label: 'Cobolt',
       submenu: [
         {
-          label: 'About ElectronReact',
+          label: 'About Cobolt',
           selector: 'orderFrontStandardAboutPanel:',
         },
         { type: 'separator' },
         { label: 'Services', submenu: [] },
         { type: 'separator' },
         {
-          label: 'Hide ElectronReact',
+          label: 'Hide Cobolt',
           accelerator: 'Command+H',
           selector: 'hide:',
         },
@@ -180,6 +182,15 @@ export default class MenuBuilder {
             shell.openExternal('https://github.com/electron/electron/issues');
           },
         },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates...',
+          click: () => {
+            log.info('[Menu] Check for Updates clicked');
+            this.mainWindow.webContents.send('check-for-updates-menu');
+            log.info('[Menu] Sent check-for-updates-menu event to renderer');
+          },
+        },
       ],
     };
 
@@ -189,11 +200,12 @@ export default class MenuBuilder {
         ? subMenuViewDev
         : subMenuViewProd;
 
-    return [subMenuAbout, subMenuEdit, subMenuView, subMenuWindow, subMenuHelp];
+    // Cast to MenuItemConstructorOptions[] for compatibility with Menu.buildFromTemplate
+    return [subMenuAbout, subMenuEdit, subMenuView, subMenuWindow, subMenuHelp] as MenuItemConstructorOptions[];
   }
 
-  buildDefaultTemplate() {
-    const templateDefault = [
+  buildDefaultTemplate(): MenuItemConstructorOptions[] {
+    const templateDefault: MenuItemConstructorOptions[] = [
       {
         label: '&File',
         submenu: [
@@ -273,6 +285,15 @@ export default class MenuBuilder {
             label: 'Search Issues',
             click() {
               shell.openExternal('https://github.com/platinum-hill/cobolt/issues');
+            },
+          },
+          { type: 'separator' },
+          {
+            label: 'Check for Updates...',
+            click: () => {
+              log.info('[Menu] Check for Updates clicked');
+              this.mainWindow.webContents.send('check-for-updates-menu');
+              log.info('[Menu] Sent check-for-updates-menu event to renderer');
             },
           },
         ],

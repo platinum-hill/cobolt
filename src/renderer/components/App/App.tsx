@@ -3,6 +3,7 @@ import log from 'electron-log/renderer';
 import ChatInterface from '../ChatInterface/ChatInterface';
 import SettingsPanel from '../SettingsPanel/SettingsPanel';
 import ErrorDialog from '../ErrorDialog/ErrorDialog';
+import UpdateNotification from '../UpdateNotification/UpdateNotification';
 import './App.css';
 
 export default function App() {
@@ -61,6 +62,7 @@ export default function App() {
         currentChatId={currentChatId}
       />
       <ErrorDialog />
+      <UpdateNotification />
     </div>
   );
 }
