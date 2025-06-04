@@ -30,6 +30,7 @@ const validChannels = {
     'download-update',
     'install-update',
     'get-update-status',
+    'get-app-version', // Add this
   ],
   on: [
     'message-response',
