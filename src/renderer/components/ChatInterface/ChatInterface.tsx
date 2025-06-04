@@ -117,7 +117,6 @@ interface ExecutionEvent {
   isError?: boolean;
 }
 
-// Legacy interface for backward compatibility during transition
 interface ExecutionState {
   [id: string]: {
     type: 'tool' | 'thinking';
@@ -153,7 +152,6 @@ const processExecutionEvents = (
 // Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
   // Clean execution events from content first and extract events
-  // NEW: Create immediate tool call dropdowns from execution events for better UX
   const { cleanContent, events } = processExecutionEvents(content);
   const processedContent = cleanContent;
 
@@ -164,7 +162,7 @@ const processMessageContent = (content: string) => {
     thinkingContent?: string;
     id?: string;
     isComplete?: boolean;
-    thinkingBlockIndex?: number; // For stable thinking block mapping
+    thinkingBlockIndex?: number;
   }> = [];
 
   // Store immediate tool call data from execution events (don't add to contentBlocks yet)
@@ -543,7 +541,6 @@ function ChatInterface({
   const [manuallyToggledThinking, setManuallyToggledThinking] = useState<{
     [blockId: string]: boolean;
   }>({});
-  // Legacy execution state (for backward compatibility during transition)
   const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});

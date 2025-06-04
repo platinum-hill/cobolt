@@ -56,8 +56,8 @@ class ChatHistory {
 
   /**
    * Convert chat history to format used by Ollama LLM
-   * CLEAN ARCHITECTURE: Removes execution metadata from AI context
-   * @returns Array of Message objects in Ollama format with clean content
+   * @returns Array of Message objects in Ollama format
+   * with UI content context scrubbed
    */
   toOllamaMessages(): Message[] {
     return this.messages.map(message => ({
