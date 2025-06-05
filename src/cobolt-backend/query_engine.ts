@@ -115,7 +115,7 @@ class QueryEngine {
       let conversationComplete = false;
       
       while (!conversationComplete && !cancellationToken.isCancelled) {
-        TraceLogger.trace(requestContext, 'single-conversation-round', `Starting conversation round with ${conversationMessages.length} messages`);
+        TraceLogger.trace(requestContext, 'conversation-round', `Starting conversation round with ${conversationMessages.length} messages`);
         
         // Get ollama client and constants
         const ollama = getOllamaClient();
@@ -164,7 +164,7 @@ class QueryEngine {
           }
         }
         
-        let assistantContent = '';
+        let chatContent = '';
         const detectedToolCalls: any[] = [];
         const thinkingState: {id?: string, startTime?: number} = {};
         
@@ -194,13 +194,13 @@ class QueryEngine {
               yield thinkingEvent;
             }
             
-            assistantContent += part.message.content;
+            chatContent += part.message.content;
             yield part.message.content;
           }
           
           // Log when content is empty but tool_calls appear
           if (!part.message.content && part.message.tool_calls) {
-            console.log('🚨 TOOL CALLS APPEARED WITH NO CONTENT!');
+            console.log('TOOL CALLS APPEARED WITH NO CONTENT! RAG');
           }
           
           // Log when we get official tool calls
@@ -210,7 +210,7 @@ class QueryEngine {
           
           // IMMEDIATE tool execution when tool calls appear in stream
           if (part.message.tool_calls && part.message.tool_calls.length > 0) {
-            console.log('✅ COMPLETE tool calls received:', JSON.stringify(part.message.tool_calls, null, 2));
+            console.log('COMPLETE tool calls received:', JSON.stringify(part.message.tool_calls, null, 2));
             TraceLogger.trace(requestContext, 'streaming-tool-calls', `Tool calls received in stream: ${part.message.tool_calls.map(tc => tc.function.name).join(', ')}`);
             
             // Process each tool call immediately
@@ -337,24 +337,24 @@ class QueryEngine {
         // Add assistant message to conversation
         conversationMessages.push({
           role: 'assistant',
-          content: assistantContent,
+          content: chatContent,
           tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
         });
         
         // SAVE TO MEMORY AFTER EVERY RESPONSE
-        if (assistantContent.trim()) {
-          console.log('💾 Saving response to memory:', assistantContent.substring(0, 50) + '...');
+        if (chatContent.trim()) {
+          console.log('Saving response to memory:', chatContent.substring(0, 50) + '...');
           addToMemory([
             { role: 'user', content: requestContext.question },
-            { role: 'assistant', content: assistantContent }
+            { role: 'assistant', content: chatContent }
           ]).catch((error) => {
-            console.error('❌ Memory save failed:', error);
+            console.error('Memory save failed:', error);
           });
         }
 
         // Log what the AI said in this round
-        TraceLogger.trace(requestContext, 'single-conversation-assistant-content', `AI said: ${assistantContent}`);
-        TraceLogger.trace(requestContext, 'single-conversation-detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
+        TraceLogger.trace(requestContext, 'chat-content', `AI said: ${chatContent}`);
+        TraceLogger.trace(requestContext, 'detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
         
         // If no tool calls, conversation is complete
         if (detectedToolCalls.length === 0) {
@@ -375,9 +375,9 @@ class QueryEngine {
           
           yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
           
-          TraceLogger.trace(requestContext, 'single-conversation-tool-start', `Executing ${toolName}`);
-          TraceLogger.trace(requestContext, 'single-conversation-tool-args', `Tool arguments: ${toolArguments}`);
-          TraceLogger.trace(requestContext, 'single-conversation-mcp-request', `MCP Request: ${JSON.stringify(toolCall, null, 2)}`);
+          TraceLogger.trace(requestContext, 'tool-start', `Executing ${toolName}`);
+          TraceLogger.trace(requestContext, 'tool-args', `Tool arguments: ${toolArguments}`);
+          TraceLogger.trace(requestContext, 'mcp-request', `MCP Request: ${JSON.stringify(toolCall, null, 2)}`);
           
           const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
           
@@ -407,8 +407,8 @@ class QueryEngine {
           
           try {
             const toolResponse = await tool.mcpFunction(requestContext, toolCall);
-            TraceLogger.trace(requestContext, 'single-conversation-tool-success', `Tool ${toolName} completed`);
-            TraceLogger.trace(requestContext, 'single-conversation-mcp-response', `MCP Response: ${JSON.stringify(toolResponse, null, 2)}`);
+            TraceLogger.trace(requestContext, 'tool-success', `Tool ${toolName} completed`);
+            TraceLogger.trace(requestContext, 'tool-response', `Tool Response: ${JSON.stringify(toolResponse, null, 2)}`);
             
             let resultText = '';
             if (toolResponse.isError) {
@@ -442,7 +442,7 @@ class QueryEngine {
             
           } catch (error: any) {
             const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
-            TraceLogger.trace(requestContext, 'single-conversation-tool-error', errorMessage);
+            TraceLogger.trace(requestContext, 'tool-error', errorMessage);
             
             // Add error to conversation
             conversationMessages.push({
