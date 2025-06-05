@@ -31,9 +31,10 @@ function ThinkingBlock({
   const isOpen = collapsedThinking[block.id] === false;
 
   // Find execution state for THIS specific thinking block
-  const allThinkingExecutions = Object.values(
-    executionState[message.id] || {},
-  ).filter((e: any) => e.type === 'thinking');
+  const messageExecState = executionState[message.id] || {};
+  const allThinkingExecutions = Object.values(messageExecState).filter(
+    (e: any) => e?.type === 'thinking',
+  );
 
   // Use the stable thinking block index if available
   const blockThinkingIndex = block.thinkingBlockIndex ?? 0;
@@ -61,7 +62,7 @@ function ThinkingBlock({
             {isThinking && <span className="executing-badge">Thinking...</span>}
             {isCompleted && thisBlockExecution?.duration_ms && (
               <span className="time-badge">
-                {formatDuration(thisBlockExecution.duration_ms)}
+                {formatDuration(thisBlockExecution?.duration_ms || 0)}
               </span>
             )}
           </div>
