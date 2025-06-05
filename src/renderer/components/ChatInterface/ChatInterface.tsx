@@ -3,7 +3,6 @@ import React, {
   useEffect,
   useState,
   Component,
-  ErrorInfo,
   ReactNode,
 } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -11,7 +10,6 @@ import remarkGfm from 'remark-gfm';
 import { Clipboard } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import log from 'electron-log/renderer';
-
 import useMessages from '../../hooks/useMessages';
 import useScrollToBottom from '../../hooks/useScrollToBottom';
 import './ChatInterface.css';
@@ -29,14 +27,6 @@ class MessageErrorBoundary extends Component<
   constructor(props: { children: ReactNode; messageId: string }) {
     super(props);
     this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    log.error('Message rendering error:', error, errorInfo);
   }
 
   render() {

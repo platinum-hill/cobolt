@@ -145,7 +145,7 @@ class QueryEngine {
           if (errorMessage.includes('does not support tools')) {
             TraceLogger.trace(requestContext, 'model-tools-fallback', `Model ${MODELS.CHAT_MODEL} does not support tools, falling back to simple chat`);
             
-            // Fall back to simple chat without tools
+            // For models without tool calling, use simple chat
             const simpleChatStream = simpleChatOllamaStream(requestContext, systemPrompt, memories);
             
             // Stream the response directly from simple chat
@@ -497,46 +497,6 @@ class QueryEngine {
     }
   }
 
-  /**
-   * Wrap a stream generator with cancellation check and tool calls metadata
-   */
-  private async *wrappedStreamWithToolCalls(
-    stream: AsyncGenerator<string>,
-    cancellationToken: CancellationToken,
-    toolCallsMetadata: string
-  ): AsyncGenerator<string> {
-    try {
-      let isFirstChunk = true;
-      for await (const chunk of stream) {
-        if (cancellationToken.isCancelled) {
-          TraceLogger.trace({ requestId: "cancelled", currentDatetime: new Date(), question: "", chatHistory: new ChatHistory() }, 
-            'stream_cancelled', 'User cancelled the request');
-          break;
-        }
-        
-        // Prepend tool calls metadata to the first chunk if we have tool calls
-        if (isFirstChunk && toolCallsMetadata) {
-          yield toolCallsMetadata + chunk;
-          isFirstChunk = false;
-        } else {
-          yield chunk;
-        }
-      }
-    } finally {
-      // Ensure we don't leave the token in cancelled state
-      cancellationToken.reset();
-    }
-  }
-
-  private async *emptyCancelledStream(cancellationToken: CancellationToken): AsyncGenerator<string> {
-    // We still need to reset the token
-    try {
-      yield "Operation cancelled";
-    } finally {
-      cancellationToken.reset();
-    }
-  }
-
   async query(
     requestContext: RequestContext,
     chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
@@ -557,35 +517,4 @@ class QueryEngine {
 
 const queryEngineInstance = new QueryEngine();
 
-// TODO: replace this with actual tests
-if (require.main === module) {
-  (async () => {
-    const chatMode = 'CONTEXT_AWARE';
-    const requestContext: RequestContext = {
-      currentDatetime: new Date(),
-      chatHistory: new ChatHistory(),
-      question: 'Why is the sky blue?',
-      requestId: "test-request-id",
-    };
-    const stream = await queryEngineInstance.query(requestContext, chatMode);
-    if (!stream) {
-      process.exit(1);
-    }
-    // eslint-disable-next-line no-restricted-syntax
-    let output = "";
-    let isFirstToken = true;
-    for await (const chunk of stream) {
-      if (isFirstToken) {
-        output += chunk;
-        isFirstToken = false;
-        TraceLogger.trace(requestContext, 'response_to_user_ttft', output);
-      } else {
-        output += chunk;
-      }
-    }
-    TraceLogger.trace(requestContext, 'response_to_user_complete', output);
-  })();
-}
-
 export { QueryEngine, queryEngineInstance };
-
