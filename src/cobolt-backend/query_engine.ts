@@ -311,7 +311,7 @@ class QueryEngine {
                 
                 // Send completion immediately
                 const duration_ms = Date.now() - toolStartTime;
-                const toolCallInfo = this.createToolCallSuccessInfo(toolName, toolArguments, resultText, duration_ms, toolResponse.isError);
+                const toolCallInfo = this.createToolCallSuccessInfo(toolName, toolArguments, resultText, duration_ms, toolResponse.isError || false);
                 
                 yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: toolResponse.isError});
                 yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
