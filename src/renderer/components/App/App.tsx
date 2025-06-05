@@ -53,6 +53,7 @@ export default function App() {
 
   return (
     <div className="app-container">
+      <UpdateNotification />
       <ChatInterface currentChatId={currentChatId} isLoading={isLoading} />
       <SettingsPanel
         isLoading={isLoading}
@@ -62,7 +63,6 @@ export default function App() {
         currentChatId={currentChatId}
       />
       <ErrorDialog />
-      <UpdateNotification />
     </div>
   );
 }

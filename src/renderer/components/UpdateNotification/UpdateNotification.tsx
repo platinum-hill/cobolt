@@ -19,26 +19,17 @@ interface UpdateStatus {
   };
 }
 
-// Singleton instance tracking
-let activeInstance = 0;
-
 function UpdateNotification() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' });
   const [showNotification, setShowNotification] = useState(false);
   const [userDismissed, setUserDismissed] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string>('');
-  const instanceId = useRef(++activeInstance);
   const mounted = useRef(true);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     mounted.current = true;
     
-    // Only the latest instance should be active
-    if (instanceId.current !== activeInstance) {
-      log.warn(`[UpdateNotification] Instance ${instanceId.current} is not active, skipping initialization`);
-      return;
-    }
-
     // Get current version
     window.electron.ipcRenderer.invoke('get-app-version').then((version) => {
       if (mounted.current) {
@@ -46,70 +37,80 @@ function UpdateNotification() {
       }
     });
 
-    // Don't check initial status on mount to avoid race conditions
-    log.info(`[UpdateNotification] Component mounted (instance ${instanceId.current})`);
+    // On mount, get the current update status
+    window.electron.ipcRenderer.invoke('get-update-status').then((status) => {
+      if (!mounted.current) return;
+      if (status && status.currentVersion) {
+        setCurrentVersion(status.currentVersion);
+      }
+      if (status && status.isChecking) {
+        setUpdateStatus({ status: 'checking' });
+        setShowNotification(true);
+      } else if (status && status.updateAvailable) {
+        setUpdateStatus({ status: 'available', info: status.updateInfo });
+        setShowNotification(true);
+      } else if (status && status.lastStatus === 'downloaded') {
+        setUpdateStatus({ status: 'downloaded', info: status.updateInfo });
+        setShowNotification(true);
+      } else if (status && status.lastStatus === 'downloading') {
+        setUpdateStatus({ status: 'downloading', progress: status.lastProgress });
+        setShowNotification(true);
+      } else if (status && status.lastStatus === 'error') {
+        setUpdateStatus({ status: 'error', error: status.lastError });
+        setShowNotification(true);
+      }
+    });
 
     // Listen for update status changes
     const handleUpdateStatus = (_event: any, data: any) => {
-      if (!mounted.current || instanceId.current !== activeInstance) return;
+      if (!mounted.current) return;
       
-      log.info('[UpdateNotification] Update status event received:', data.status);
+      // Clear any existing hide timeout
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+        hideTimeoutRef.current = null;
+      }
       
-      if (data.status === 'available' && data.info) {
-        // Check if this is actually a new version
-        if (data.info.version !== currentVersion) {
-          setUpdateStatus({ status: data.status, info: data.info });
-          setShowNotification(true);
-          setUserDismissed(false);
-        } else {
-          // Same version, no update needed
-          setUpdateStatus({ status: 'not-available' });
-          setShowNotification(true);
-          setTimeout(() => {
-            setShowNotification(false);
-          }, 3000);
-        }
-      } else {
-        setUpdateStatus({
-          status: data.status,
-          info: data.info,
-          error: data.error,
-          progress: data.progress
-        });
+      // Don't show notification if user dismissed and it's the same update
+      if (userDismissed && data.status === 'available' && 
+          updateStatus.info?.version === data.info?.version) {
+        return;
+      }
+      
+      setUpdateStatus({
+        status: data.status,
+        info: data.info,
+        error: data.error,
+        progress: data.progress
+      });
+      
+      // Show notification for all statuses except idle
+      if (data.status !== 'idle') {
+        setShowNotification(true);
         
-        // Show notification for certain statuses
-        if (['checking', 'downloading', 'downloaded', 'error', 'not-available'].includes(data.status)) {
-          setShowNotification(true);
-          
-          // Auto-hide "not-available" after a delay
-          if (data.status === 'not-available') {
-            setTimeout(() => {
-              if (mounted.current && updateStatus.status === 'not-available') {
-                setShowNotification(false);
-              }
-            }, 3000);
-          }
+        // Auto-hide "not-available" after 3 seconds
+        if (data.status === 'not-available') {
+          hideTimeoutRef.current = setTimeout(() => {
+            if (mounted.current) {
+              setShowNotification(false);
+            }
+          }, 3000);
         }
       }
     };
 
     // Listen for menu-triggered update checks
     const handleCheckForUpdatesMenu = () => {
-      if (!mounted.current || instanceId.current !== activeInstance) return;
-      
-      log.info('[UpdateNotification] Check for updates triggered from menu');
+      if (!mounted.current) return;
+
       setUserDismissed(false);
-      setShowNotification(true);
+
+      // Show checking status immediately
       setUpdateStatus({ status: 'checking' });
-      
-      window.electron.ipcRenderer.invoke('check-for-updates').then((result) => {
-        if (!mounted.current) return;
-        
-        log.info('[UpdateNotification] Check for updates result:', result);
-        if (!result.success && result.error) {
-          setUpdateStatus({ status: 'error', error: result.error });
-        }
-      });
+      setShowNotification(true);
+
+      // Then invoke the check (status will be updated via 'update-status' event)
+      window.electron.ipcRenderer.invoke('check-for-updates');
     };
 
     // Use the existing IPC pattern
@@ -118,18 +119,15 @@ function UpdateNotification() {
 
     return () => {
       mounted.current = false;
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
       window.electron.ipcRenderer.removeListener('update-status', handleUpdateStatus);
       window.electron.ipcRenderer.removeListener('check-for-updates-menu', handleCheckForUpdatesMenu);
-      
-      // Clear active instance if this was the active one
-      if (instanceId.current === activeInstance) {
-        activeInstance = 0;
-      }
     };
-  }, [currentVersion]);
+  }, [userDismissed, updateStatus.info?.version]);
 
   const handleDownload = async () => {
-    log.info('[UpdateNotification] Download clicked');
     const result = await window.electron.ipcRenderer.invoke('download-update');
     if (!result.success) {
       setUpdateStatus({ status: 'error', error: result.error });
@@ -137,7 +135,6 @@ function UpdateNotification() {
   };
 
   const handleInstall = async () => {
-    log.info('[UpdateNotification] Install clicked');
     await window.electron.ipcRenderer.invoke('install-update');
   };
 
@@ -146,7 +143,7 @@ function UpdateNotification() {
     setUserDismissed(true);
   };
 
-  if (!showNotification || instanceId.current !== activeInstance) return null;
+  if (!showNotification) return null;
 
   const renderContent = () => {
     switch (updateStatus.status) {

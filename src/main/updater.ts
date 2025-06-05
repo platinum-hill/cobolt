@@ -6,6 +6,10 @@ export class AppUpdater {
   private mainWindow: BrowserWindow | null = null;
   private isCheckingUpdate = false;
   private checkPromise: Promise<any> | null = null;
+  private lastStatus: string = 'idle';
+  private lastInfo: any = null;
+  private lastError: string | undefined = undefined;
+  private lastProgress: any = undefined;
 
   constructor() {
     log.info('[AppUpdater] Initializing');
@@ -38,7 +42,6 @@ export class AppUpdater {
 
   private setupEventHandlers() {
     autoUpdater.on('checking-for-update', () => {
-      log.info('[AppUpdater] Checking for update');
       this.sendStatusToWindow('checking');
     });
 
@@ -50,7 +53,6 @@ export class AppUpdater {
     });
 
     autoUpdater.on('update-not-available', (info) => {
-      log.info(`[AppUpdater] No update available (current: v${app.getVersion()})`);
       this.isCheckingUpdate = false;
       this.checkPromise = null;
       this.sendStatusToWindow('not-available', info);
@@ -64,7 +66,6 @@ export class AppUpdater {
     });
 
     autoUpdater.on('download-progress', (progressObj) => {
-      log.debug(`[AppUpdater] Download progress: ${progressObj.percent.toFixed(1)}%`);
       this.sendStatusToWindow('downloading', undefined, undefined, progressObj);
     });
 
@@ -77,7 +78,6 @@ export class AppUpdater {
   private setupIpcHandlers() {
     ipcMain.handle('check-for-updates', async () => {
       if (!app.isPackaged) {
-        log.debug('[AppUpdater] Skipping update check in development');
         this.sendStatusToWindow('not-available', { version: app.getVersion() });
         return { 
           success: true, 
@@ -88,7 +88,6 @@ export class AppUpdater {
 
       // If already checking, return the existing promise
       if (this.isCheckingUpdate && this.checkPromise) {
-        log.debug('[AppUpdater] Update check already in progress, waiting for result');
         try {
           const result = await this.checkPromise;
           return { success: true, updateInfo: result?.updateInfo };
@@ -115,7 +114,6 @@ export class AppUpdater {
     ipcMain.handle('download-update', async () => {
       try {
         await autoUpdater.downloadUpdate();
-        log.info('[AppUpdater] Download started');
         return { success: true };
       } catch (error) {
         log.error('[AppUpdater] Download failed:', error);
@@ -124,28 +122,46 @@ export class AppUpdater {
     });
 
     ipcMain.handle('install-update', () => {
-      log.info('[AppUpdater] Installing update and restarting');
       autoUpdater.quitAndInstall(false, true);
       return { success: true };
     });
 
     ipcMain.handle('get-update-status', async () => {
       try {
-        // Don't trigger a new check, just return cached status
         const currentVersion = app.getVersion();
         return {
-          updateAvailable: false,
+          updateAvailable: this.lastStatus === 'available',
+          updateInfo: this.lastInfo,
           currentVersion,
-          isChecking: this.isCheckingUpdate
+          isChecking: this.isCheckingUpdate,
+          lastStatus: this.lastStatus,
+          lastError: this.lastError,
+          lastProgress: this.lastProgress,
         };
       } catch (error) {
         log.error('[AppUpdater] Status check failed:', error);
         return { updateAvailable: false, currentVersion: app.getVersion() };
       }
     });
+
+    ipcMain.handle('check-for-updates-menu', () => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send('update-status', {
+          status: this.isCheckingUpdate ? 'checking' : this.lastStatus || 'idle',
+          info: this.lastInfo,
+          error: this.lastError,
+          progress: this.lastProgress,
+        });
+      }
+      return { success: true };
+    });
   }
 
   private sendStatusToWindow(status: string, info?: any, error?: string, progress?: any) {
+    this.lastStatus = status;
+    this.lastInfo = info;
+    this.lastError = error;
+    this.lastProgress = progress;
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
         status,
@@ -158,21 +174,19 @@ export class AppUpdater {
 
   checkForUpdatesOnStartup() {
     if (!app.isPackaged) {
-      log.debug('[AppUpdater] Skipping startup check in development');
       return;
     }
 
-    // Check for updates 10 seconds after startup to avoid conflicts
+    // Check for updates 3 seconds after startup to avoid conflicts
     setTimeout(() => {
-      log.info('[AppUpdater] Running startup update check');
-      autoUpdater.checkForUpdates().catch(err => {
+      this.sendStatusToWindow('checking');
+      autoUpdater.checkForUpdatesAndNotify().catch(err => {
         log.error('[AppUpdater] Startup check failed:', err.message);
       });
-    }, 10000);
+    }, 3000);
   }
 
   checkForUpdatesManually() {
-    log.info('[AppUpdater] Manual check triggered');
-    autoUpdater.checkForUpdates();
+    autoUpdater.checkForUpdatesAndNotify();
   }
 }
