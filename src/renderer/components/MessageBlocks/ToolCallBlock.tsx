@@ -1,11 +1,13 @@
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
-interface ToolCallBlockProps {
+// Updated interface to include manuallyToggledToolCalls
+export interface ToolCallBlockProps {
   block: any;
   message: any;
   blockIndex: number;
   collapsedToolCalls: any;
+  manuallyToggledToolCalls: any;
   toggleToolCall: (messageId: string, toolIndex: number) => void;
   executionState: any;
   toolCallsRefs: React.MutableRefObject<any>;
@@ -17,6 +19,7 @@ function ToolCallBlock({
   message,
   blockIndex,
   collapsedToolCalls,
+  manuallyToggledToolCalls, // eslint-disable-line @typescript-eslint/no-unused-vars
   toggleToolCall,
   executionState,
   toolCallsRefs,
