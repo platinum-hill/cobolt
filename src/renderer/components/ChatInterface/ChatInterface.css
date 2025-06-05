@@ -265,9 +265,8 @@
 .assistant-message::after {
   content: '';
   position: absolute;
-  right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 0.25rem; /* Closer to actual content edge */
+  bottom: 0.75rem; /* Fixed distance from bottom */
   width: 1rem;
   height: 1rem;
   border: 2px solid #7CA97E;
@@ -275,6 +274,7 @@
   border-top-color: transparent;
   animation: spin 1s linear infinite;
   opacity: 0;
+  z-index: 10; /* Ensure it's above content */
 }
 
 .assistant-message.loading::after {
