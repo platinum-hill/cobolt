@@ -436,9 +436,6 @@ function ChatInterface({
   const [manuallyToggledToolCalls, setManuallyToggledToolCalls] = useState<{
     [messageId: string]: { [toolIndex: number]: boolean };
   }>({});
-  const [manuallyToggledThinking, setManuallyToggledThinking] = useState<{
-    [blockId: string]: boolean;
-  }>({});
   const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});
@@ -466,12 +463,7 @@ function ChatInterface({
   const thinkingBlockRefs = useRef<{
     [blockId: string]: HTMLDivElement | null;
   }>({});
-  const autoCollapseScheduled = useRef<{
-    [messageId: string]: { [toolIndex: number]: boolean };
-  }>({});
-  const autoCollapseScheduledThinking = useRef<{
-    [blockId: string]: boolean;
-  }>({});
+  // Removed autoCollapseScheduled refs - simplified dropdown behavior
 
   // Separate function to adjust textarea height for reuse
   const adjustTextareaHeight = () => {
@@ -528,12 +520,6 @@ function ChatInterface({
       ...prev,
       [thinkingBlockId]: !prev[thinkingBlockId],
     }));
-
-    // Mark this thinking block as manually toggled by user (prevents auto-collapse)
-    setManuallyToggledThinking((prev) => ({
-      ...prev,
-      [thinkingBlockId]: true,
-    }));
   };
 
   const toggleToolCall = (messageId: string, toolIndex: number) => {
@@ -575,7 +561,7 @@ function ChatInterface({
               ...prev,
               [message.id]: {
                 ...prev[message.id],
-                [toolIndex]: false, // false = open
+                [toolIndex]: true, // true = closed (default closed)
               },
             }));
           }
@@ -703,107 +689,6 @@ function ChatInterface({
       }
     });
   }, [messages]);
-
-  // Auto-collapse dropdown when tool call is completed (only if not manually toggled)
-  useEffect(() => {
-    messages.forEach((message) => {
-      if (message.sender === 'assistant') {
-        const { contentBlocks } = processMessageContent(
-          message.content,
-          message.id,
-        );
-
-        // For each tool call block, check if it should auto-collapse
-        const toolCallBlocks = contentBlocks.filter(
-          (block) => block.type === 'tool_call',
-        );
-        toolCallBlocks.forEach((block) => {
-          const toolIndex = block.toolCall?.blockIndex ?? 0;
-          const { toolCall } = block;
-
-          // Check execution state for more accurate status
-          const messageExecutions = executionState[message.id] || {};
-
-          // Get execution state by event ID
-          const thisToolExecution = toolCall.executionEventId
-            ? messageExecutions[toolCall.executionEventId]
-            : null;
-
-          // Use execution state for completion status
-          const isCompleted = thisToolExecution?.status === 'complete';
-
-          const isOpen = collapsedToolCalls[message.id]?.[toolIndex] === false;
-          const notManuallyToggled =
-            !manuallyToggledToolCalls[message.id]?.[toolIndex];
-          const notScheduled =
-            !autoCollapseScheduled.current[message.id]?.[toolIndex];
-
-          // If dropdown is open, tool completed, hasn't been manually toggled, and we haven't scheduled auto-collapse yet
-          if (isOpen && isCompleted && notManuallyToggled && notScheduled) {
-            // Mark as scheduled to prevent duplicate timeouts
-            if (!autoCollapseScheduled.current[message.id]) {
-              autoCollapseScheduled.current[message.id] = {};
-            }
-            autoCollapseScheduled.current[message.id][toolIndex] = true;
-
-            setTimeout(() => {
-              setCollapsedToolCalls((prev) => ({
-                ...prev,
-                [message.id]: {
-                  ...prev[message.id],
-                  [toolIndex]: true, // true = collapsed
-                },
-              }));
-              // Clean up the scheduled flag
-              if (autoCollapseScheduled.current[message.id]) {
-                delete autoCollapseScheduled.current[message.id][toolIndex];
-              }
-            }, 2000); // 2 second delay to let user see results
-          }
-        });
-
-        // For each thinking block, check if it should auto-collapse
-        const thinkingBlocks = contentBlocks.filter(
-          (block) => block.type === 'thinking',
-        );
-
-        // Auto close any completed thinking dropdowns
-        // This is for when you open previous chats which had thinking dropdowns
-        // This closes open and complete thinking dropdowns
-        thinkingBlocks.forEach((block) => {
-          if (block.id) {
-            const isCompleted = block.isComplete;
-            const isOpen = collapsedThinking[block.id] === false;
-            const notManuallyToggled = !manuallyToggledThinking[block.id];
-            const notScheduled =
-              !autoCollapseScheduledThinking.current[block.id];
-
-            // If dropdown is open, thinking completed, hasn't been manually toggled, and we haven't scheduled auto-collapse yet
-            if (isOpen && isCompleted && notManuallyToggled && notScheduled) {
-              // Mark as scheduled to prevent duplicate timeouts
-              autoCollapseScheduledThinking.current[block.id] = true;
-
-              setTimeout(() => {
-                setCollapsedThinking((prev) => ({
-                  ...prev,
-                  [block.id!]: true, // true = collapsed
-                }));
-                // Clean up the scheduled flag
-                delete autoCollapseScheduledThinking.current[block.id!];
-              }, 2000); // 2 second delay
-            }
-          }
-        });
-      }
-    });
-  }, [
-    messages,
-    manuallyToggledToolCalls,
-    collapsedToolCalls,
-    manuallyToggledThinking,
-    collapsedThinking,
-    executionState, // Added to detect when tools complete
-  ]);
 
   return (
     <div

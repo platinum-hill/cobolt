@@ -323,7 +323,7 @@
 }
 
 .reset-button {
-  background: transparent;
+  background: rgba(143, 185, 150, 0.1);
   border: none;
   color: #8FB996;
   padding: 0.5rem;
@@ -724,55 +724,39 @@
 
 .thinking-header {
   /* Reset button styles */
-  background: none;
   border: none;
   font: inherit;
   text-align: left;
   width: 100%;
   
-  /* Modern button styling */
-  background: linear-gradient(135deg, rgba(124, 169, 126, 0.08) 0%, rgba(143, 185, 150, 0.06) 100%);
+  /* Visible button styling */
+  background: rgba(143, 185, 150, 0.15);
   padding: 0.5rem 0.75rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: rgba(143, 185, 150, 0.85);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  /* Removed transitions for simpler styling */
   border-radius: 4px 4px 0 0;
   font-weight: 500;
   font-size: 0.875rem;
   letter-spacing: 0.025em;
   position: relative;
-  overflow: hidden;
 }
 
-.thinking-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(124, 169, 126, 0.1) 0%, rgba(143, 185, 150, 0.08) 100%);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  z-index: 0;
-}
+/* Removed gradient hover effects for clean appearance */
 
-.thinking-header:hover::before {
-  opacity: 1;
+/* Removed hover effects for consistency */
+
+.thinking-header:focus,
+.thinking-header:focus-visible {
+  outline: none;
 }
 
 .thinking-header:hover {
-  color: rgba(143, 185, 150, 1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(124, 169, 126, 0.15);
-}
-
-.thinking-header:focus {
-  outline: 2px solid rgba(124, 169, 126, 0.4);
-  outline-offset: 2px;
+  transform: none !important;
+  opacity: inherit !important;
 }
 
 /* Remove Tool call buttons */
@@ -782,10 +766,7 @@
   box-shadow: none;
 }
 
-.thinking-header:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(124, 169, 126, 0.1);
-}
+/* Removed active state effects for consistency */
 
 /* Update the emoji and arrow to be positioned correctly */
 .thinking-header .header-content {
@@ -793,8 +774,6 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  position: relative;
-  z-index: 1;
 }
 .thinking-header .header-text {
   display: flex;
@@ -821,15 +800,15 @@
 
 .thinking-content {
   padding: 0.5rem 0.75rem;
-  background-color: rgba(124, 169, 126, 0.02);
+  background-color: transparent;
   font-family: monospace;
   color: rgba(143, 185, 150, 0.8);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
-  transition: all 0.3s ease-out;
-  border-top: 1px solid rgba(124, 169, 126, 0.1);
+  /* Removed transition for simpler styling */
+  border-top: none;
 }
 
 .thinking-content.collapsed {
@@ -842,7 +821,7 @@
 /* Tool calls section styles */
 .tool-calls-section {
   margin: 0 0 0.5rem 0;
-  border: 1px solid rgba(124, 169, 126, 0.1);
+  border: none;
   border-radius: 4px;
   overflow: hidden;
   font-size: 0.85em;
@@ -850,7 +829,7 @@
 
 .tool-call-block {
   padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(124, 169, 126, 0.05);
+  border-bottom: none;
 }
 
 .tool-call-block:last-child {
