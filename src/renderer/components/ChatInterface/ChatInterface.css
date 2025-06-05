@@ -299,6 +299,7 @@
   padding: 1rem var(--chat-padding-large) 2rem;
   background-color: #1E2329;
   width: 100%;
+  position: relative;
   box-sizing: border-box;
 }
 
@@ -366,6 +367,69 @@
 .reset-button:hover::before,
 .reset-button:hover::after {
   background-color: #ffffff;
+}
+
+.close-chat-button {
+  position: absolute;
+  top: 47%;
+  right: 0rem;
+  transform: translateY(-50%);
+  background: rgba(244, 67, 54, 0.1);
+  border: none;
+  color: #f44336;
+  padding: 0.5rem;
+  font-size: 1rem;
+  border-radius: 50%;
+  min-width: 25px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.close-chat-button:hover {
+  background: rgba(244, 67, 54, 0.2);
+  color: #e53935;
+  transform: translateY(calc(-50% - 1px));
+}
+
+.close-chat-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.send-button {
+  background: rgba(143, 185, 150, 0.15);
+  border: none;
+  color: #8FB996;
+  padding: 0.5rem;
+  font-size: 1rem;
+  border-radius: 50%;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.send-button:hover {
+  background: rgba(143, 185, 150, 0.25);
+  color: #C5D8BC;
+  transform: translateY(-1px);
+}
+
+.send-button.disabled {
+  background: rgba(143, 185, 150, 0.05);
+  color: rgba(143, 185, 150, 0.3);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.send-button.disabled:hover {
+  transform: none;
+  background: rgba(143, 185, 150, 0.05);
+  color: rgba(143, 185, 150, 0.3);
 }
 
 .message-input {
@@ -483,7 +547,7 @@
 
 .assistant-message-content {
   position: relative;
-  padding-bottom: 24px; /* give space for button */
+  padding-bottom: 24px;
 }
 
 .message-actions {
@@ -500,7 +564,7 @@
   border: none;
   cursor: pointer;
   opacity: 0.6;
-  color: #e6e6e6; /* light gray/white tone */
+  color: #e6e6e6;
   transition: opacity 0.2s ease-in-out;
   padding: 2px;
 }
@@ -757,6 +821,23 @@
 .thinking-header:hover {
   transform: none !important;
   opacity: inherit !important;
+}
+
+/* Override global button scale effect for input buttons */
+.close-chat-button:hover {
+  transform: translateY(calc(-50% - 1px)) !important;
+}
+
+.send-button:hover {
+  transform: translateY(-1px) !important;
+}
+
+.cancel-button:hover {
+  transform: translateY(-2px) !important;
+}
+
+.send-button.disabled:hover {
+  transform: none !important;
 }
 
 /* Remove Tool call buttons */
