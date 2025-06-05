@@ -116,8 +116,13 @@
   }
 }
 
-.user-message {
+.user-message-wrapper {
   align-self: flex-end;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.user-message {
   background: linear-gradient(135deg, rgba(124, 169, 126, 0.15) 0%, rgba(143, 185, 150, 0.15) 100%);
   color: #C5D8BC;
   border-radius: 1rem;
@@ -272,7 +277,7 @@
   opacity: 0;
 }
 
-.assistant-message:last-child::after {
+.assistant-message.loading::after {
   opacity: 1;
 }
 

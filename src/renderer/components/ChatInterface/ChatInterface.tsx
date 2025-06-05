@@ -1,79 +1,10 @@
-import React, {
-  useRef,
-  useEffect,
-  useState,
-  Component,
-  ReactNode,
-} from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Clipboard } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import log from 'electron-log/renderer';
 import useMessages from '../../hooks/useMessages';
 import useScrollToBottom from '../../hooks/useScrollToBottom';
+import { MessageBlock, ChatInput } from '../MessageBlocks';
 import './ChatInterface.css';
-
-// Error Boundary Component to catch React crashes
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error?: Error;
-}
-
-class MessageErrorBoundary extends Component<
-  { children: ReactNode; messageId: string },
-  ErrorBoundaryState
-> {
-  constructor(props: { children: ReactNode; messageId: string }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  render() {
-    const { hasError } = this.state;
-    if (hasError) {
-      return (
-        <div
-          className="message-error"
-          style={{
-            background: '#2a1a1a',
-            border: '1px solid #ff6b6b',
-            borderRadius: '8px',
-            padding: '12px',
-            margin: '8px 0',
-          }}
-        >
-          <h4 style={{ color: '#ff6b6b', margin: '0 0 8px 0' }}>
-            Message Rendering Error
-          </h4>
-          <p
-            style={{ color: '#cccccc', fontSize: '14px', margin: '0 0 12px 0' }}
-          >
-            This message contains corrupted content and cannot be displayed.
-          </p>
-          <button
-            type="button"
-            onClick={() => this.setState({ hasError: false })}
-            style={{
-              background: '#ff6b6b',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '12px',
-            }}
-          >
-            Try Again
-          </button>
-        </div>
-      );
-    }
-
-    const { children } = this.props;
-    return children;
-  }
-}
 
 interface ChatInterfaceProps {
   isLoading: boolean;
@@ -139,8 +70,209 @@ const processExecutionEvents = (
   return { cleanContent, events };
 };
 
+// Helper function to process tool-related content blocks
+const processToolContentBlocks = (
+  processedContent: string,
+  executionEventBlocks: Map<string, any>,
+  eventIdsByToolName: Map<string, string>,
+) => {
+  const toolCallsMap = new Map<string, any>();
+
+  // Process tool updates (executing status)
+  const toolUpdateMatches = processedContent.matchAll(
+    /<tool_calls_update>(.*?)<\/tool_calls_update>/gs,
+  );
+  Array.from(toolUpdateMatches).forEach((match) => {
+    try {
+      const updateToolCalls = JSON.parse(match[1]);
+      updateToolCalls.forEach((updateTool: any, index: number) => {
+        const key = `${updateTool.name}-${JSON.stringify(updateTool.arguments)}-${Date.now()}-${index}`;
+
+        // Check if we already have a block from execution events
+        const eventId = eventIdsByToolName.get(updateTool.name);
+        const existingEventBlock = eventId
+          ? executionEventBlocks.get(eventId)
+          : null;
+        if (existingEventBlock) {
+          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
+          const updatedEventBlock = {
+            ...existingEventBlock,
+            arguments: JSON.stringify(updateTool.arguments, null, 2),
+            result: updateTool.result || 'Executing...',
+            isExecuting: updateTool.isExecuting !== false,
+          };
+          if (eventId) executionEventBlocks.set(eventId, updatedEventBlock);
+        }
+
+        toolCallsMap.set(key, updateTool);
+      });
+    } catch (error) {
+      log.error('Failed to parse tool call updates:', error);
+    }
+  });
+
+  // Process tool completions
+  const toolCompleteMatches = processedContent.matchAll(
+    /<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs,
+  );
+  Array.from(toolCompleteMatches).forEach((match) => {
+    try {
+      const completedToolCalls = JSON.parse(match[1]);
+      completedToolCalls.forEach((completedTool: any, index: number) => {
+        const key = `${completedTool.name}-${JSON.stringify(completedTool.arguments)}-${Date.now()}-${index}`;
+        const existingTool = toolCallsMap.get(key);
+
+        // Also update the execution event block if it exists
+        const eventId = eventIdsByToolName.get(completedTool.name);
+        const existingEventBlock = eventId
+          ? executionEventBlocks.get(eventId)
+          : null;
+        if (existingEventBlock) {
+          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
+          const completedEventBlock = {
+            ...existingEventBlock,
+            arguments: JSON.stringify(completedTool.arguments, null, 2),
+            result: completedTool.result || 'Completed',
+            isExecuting: false,
+            duration_ms: completedTool.duration_ms,
+            isError: completedTool.isError || false,
+          };
+          if (eventId) executionEventBlocks.set(eventId, completedEventBlock);
+        }
+
+        toolCallsMap.set(key, {
+          ...existingTool,
+          ...completedTool,
+          isExecuting: false,
+        });
+      });
+    } catch (error) {
+      log.error('Failed to parse tool call completions:', error);
+    }
+  });
+
+  // Process final tool calls
+  const toolCallMatch = processedContent.match(
+    /<tool_calls>(.*?)<\/tool_calls>/s,
+  );
+  if (toolCallMatch) {
+    try {
+      const finalToolCalls = JSON.parse(toolCallMatch[1]);
+      finalToolCalls.forEach((finalTool: any, index: number) => {
+        const key = `${finalTool.name}-${JSON.stringify(finalTool.arguments)}-${Date.now()}-${index}`;
+        const existingTool = toolCallsMap.get(key);
+        toolCallsMap.set(key, {
+          ...finalTool,
+          isExecuting: existingTool?.isExecuting || false,
+        });
+      });
+    } catch (error) {
+      log.error('Failed to parse final tool calls:', error);
+    }
+  }
+
+  return toolCallsMap;
+};
+
+// Helper function to process thinking content in a text part
+// Uses messageId + index to create stable thinking block IDs
+const processThinkingContentBlocks = (
+  partContent: string,
+  messageId: string,
+  messageThinkingIndex: { current: number },
+  contentBlocks: any[],
+) => {
+  let partProcessedContent = partContent;
+
+  // First, handle complete thinking blocks
+  const completeThinkingMatches = partProcessedContent.matchAll(
+    /<think>(.*?)<\/think>/gs,
+  );
+  Array.from(completeThinkingMatches).forEach((match) => {
+    const thinkingContent = match[1];
+    if (thinkingContent.trim()) {
+      contentBlocks.push({
+        type: 'thinking',
+        thinkingContent,
+        id: `thinking-${messageId}-${messageThinkingIndex.current}`, // Stable ID using message ID + index
+        isComplete: true,
+        thinkingBlockIndex: messageThinkingIndex.current, // Thinking block index within this message
+      });
+      messageThinkingIndex.current += 1;
+    }
+    // Remove from content to avoid double processing
+    partProcessedContent = partProcessedContent.replace(match[0], '');
+  });
+
+  // Then, handle incomplete thinking blocks (streaming)
+  const incompleteThinkingMatch = partProcessedContent.match(
+    /<think>(.*?)(?!<\/think>)$/s,
+  );
+  if (incompleteThinkingMatch) {
+    const thinkingContent = incompleteThinkingMatch[1];
+    if (thinkingContent.trim()) {
+      contentBlocks.push({
+        type: 'thinking',
+        thinkingContent,
+        id: `thinking-${messageId}-${messageThinkingIndex.current}`, // Stable ID using message ID + index
+        isComplete: false,
+        thinkingBlockIndex: messageThinkingIndex.current, // Thinking block index within this message
+      });
+      messageThinkingIndex.current += 1;
+    }
+    // Remove from content
+    partProcessedContent = partProcessedContent.replace(
+      incompleteThinkingMatch[0],
+      '',
+    );
+  }
+
+  return partProcessedContent;
+};
+
+// Helper function to process text content blocks
+const processTextContentBlocks = (
+  partContent: string,
+  index: number,
+  contentBlocks: any[],
+  messageId: string,
+) => {
+  if (partContent.trim()) {
+    contentBlocks.push({
+      type: 'text',
+      content: safeStringify(partContent),
+      id: `text-${messageId}-${index}`,
+    });
+  }
+};
+
+// Helper function to add tool call content blocks
+const addToolCallContentBlock = (
+  toolCallToUse: any,
+  currentToolCallIndex: number,
+  toolFromEvents: boolean,
+  contentBlocks: any[],
+  messageId: string,
+) => {
+  contentBlocks.push({
+    type: 'tool_call',
+    toolCall: {
+      ...toolCallToUse,
+      blockIndex: currentToolCallIndex, // Store the intended index
+    },
+    id: toolFromEvents
+      ? `tool-event-${messageId}-${currentToolCallIndex}`
+      : `tool-${messageId}-${currentToolCallIndex}`,
+  });
+};
+
+// Removed addRemainingToolCalls function - was creating duplicate tool calls
+
+// Removed complex deduplication logic - tool calls should only be created once
+
 // Sequential content parsing for inline tool rendering
-const processMessageContent = (content: string) => {
+// messageId is used to create stable thinking block IDs that don't change on re-renders
+const processMessageContent = (content: string, messageId: string) => {
   // Create immediate tool call dropdowns from execution events
   const { cleanContent, events } = processExecutionEvents(content);
   const processedContent = cleanContent;
@@ -171,107 +303,24 @@ const processMessageContent = (content: string) => {
         executionEventId: event.id, // Store the event ID for badge mapping
       };
 
-      executionEventBlocks.set(event.name || 'unknown', immediateToolCall);
+      executionEventBlocks.set(event.id, immediateToolCall);
       eventIdsByToolName.set(event.name || 'unknown', event.id);
     }
   });
 
-  // Track tool calls from content tags for merging
-  const toolCallsMap = new Map<string, any>();
-
-  // Process tool updates (executing status)
-  const toolUpdateMatches = processedContent.matchAll(
-    /<tool_calls_update>(.*?)<\/tool_calls_update>/gs,
+  // Process all tool-related content blocks
+  const toolCallsMap = processToolContentBlocks(
+    processedContent,
+    executionEventBlocks,
+    eventIdsByToolName,
   );
-  Array.from(toolUpdateMatches).forEach((match) => {
-    try {
-      const updateToolCalls = JSON.parse(match[1]);
-      updateToolCalls.forEach((updateTool: any) => {
-        const key = `${updateTool.name}-${updateTool.arguments}`;
-
-        // Check if we already have a block from execution events
-        const existingEventBlock = executionEventBlocks.get(updateTool.name);
-        if (existingEventBlock) {
-          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
-          const updatedEventBlock = {
-            ...existingEventBlock,
-            arguments: JSON.stringify(updateTool.arguments, null, 2),
-            result: updateTool.result || 'Executing...',
-            isExecuting: updateTool.isExecuting !== false,
-          };
-          executionEventBlocks.set(updateTool.name, updatedEventBlock);
-        }
-
-        toolCallsMap.set(key, updateTool);
-      });
-    } catch (error) {
-      log.error('Failed to parse tool call updates:', error);
-    }
-  });
-
-  // Process tool completions
-  const toolCompleteMatches = processedContent.matchAll(
-    /<tool_calls_complete>(.*?)<\/tool_calls_complete>/gs,
-  );
-  Array.from(toolCompleteMatches).forEach((match) => {
-    try {
-      const completedToolCalls = JSON.parse(match[1]);
-      completedToolCalls.forEach((completedTool: any) => {
-        const key = `${completedTool.name}-${completedTool.arguments}`;
-        const existingTool = toolCallsMap.get(key);
-
-        // Also update the execution event block if it exists
-        const existingEventBlock = executionEventBlocks.get(completedTool.name);
-        if (existingEventBlock) {
-          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
-          const completedEventBlock = {
-            ...existingEventBlock,
-            arguments: JSON.stringify(completedTool.arguments, null, 2),
-            result: completedTool.result || 'Completed',
-            isExecuting: false,
-            duration_ms: completedTool.duration_ms,
-            isError: completedTool.isError || false,
-          };
-          executionEventBlocks.set(completedTool.name, completedEventBlock);
-        }
-
-        toolCallsMap.set(key, {
-          ...existingTool,
-          ...completedTool,
-          isExecuting: false,
-        });
-      });
-    } catch (error) {
-      log.error('Failed to parse tool call completions:', error);
-    }
-  });
-
-  // Process final tool calls
-  const toolCallMatch = processedContent.match(
-    /<tool_calls>(.*?)<\/tool_calls>/s,
-  );
-  if (toolCallMatch) {
-    try {
-      const finalToolCalls = JSON.parse(toolCallMatch[1]);
-      finalToolCalls.forEach((finalTool: any) => {
-        const key = `${finalTool.name}-${finalTool.arguments}`;
-        const existingTool = toolCallsMap.get(key);
-        toolCallsMap.set(key, {
-          ...finalTool,
-          isExecuting: existingTool?.isExecuting || false,
-        });
-      });
-    } catch (error) {
-      log.error('Failed to parse final tool calls:', error);
-    }
-  }
 
   // Parse content using position markers for true inline tool calls
   // Split by position markers to get exact tool call locations
   const parts = processedContent.split(/(<tool_call_position id="[^"]*">)/g);
 
   let currentToolCallIndex = 0;
-  let globalThinkingIndex = 0; // Global counter for unique thinking block IDs
+  const messageThinkingIndex = { current: 0 }; // Counter for thinking blocks within this specific message
   const toolCallsArray = Array.from(toolCallsMap.values());
 
   parts.forEach((part, index) => {
@@ -284,7 +333,8 @@ const processMessageContent = (content: string) => {
 
       if (currentToolCallIndex < toolCallsArray.length) {
         const contentToolCall = toolCallsArray[currentToolCallIndex];
-        const eventBlock = executionEventBlocks.get(contentToolCall.name);
+        const eventId = eventIdsByToolName.get(contentToolCall.name);
+        const eventBlock = eventId ? executionEventBlocks.get(eventId) : null;
 
         if (eventBlock) {
           // Create a COPY of execution event block to avoid shared references
@@ -323,16 +373,13 @@ const processMessageContent = (content: string) => {
       }
 
       if (toolCallToUse) {
-        contentBlocks.push({
-          type: 'tool_call',
-          toolCall: {
-            ...toolCallToUse,
-            blockIndex: currentToolCallIndex, // Store the intended index
-          },
-          id: toolFromEvents
-            ? `tool-event-${currentToolCallIndex}`
-            : `tool-${currentToolCallIndex}`,
-        });
+        addToolCallContentBlock(
+          toolCallToUse,
+          currentToolCallIndex,
+          toolFromEvents,
+          contentBlocks,
+          messageId,
+        );
         currentToolCallIndex += 1;
       }
     } else {
@@ -342,169 +389,30 @@ const processMessageContent = (content: string) => {
         .replace(/<tool_calls_complete>.*?<\/tool_calls_complete>/gs, '')
         .replace(/<tool_calls>.*?<\/tool_calls>/gs, '');
 
-      // Handle thinking content - both complete and incomplete blocks
-      let partProcessedContent = cleanPart;
-
-      // First, handle complete thinking blocks
-      const completeThinkingMatches = partProcessedContent.matchAll(
-        /<think>(.*?)<\/think>/gs,
+      // Process thinking content first
+      const partProcessedContent = processThinkingContentBlocks(
+        cleanPart,
+        messageId,
+        messageThinkingIndex,
+        contentBlocks,
       );
-      Array.from(completeThinkingMatches).forEach((match) => {
-        const thinkingContent = match[1];
-        if (thinkingContent.trim()) {
-          contentBlocks.push({
-            type: 'thinking',
-            thinkingContent,
-            id: `thinking-global-${globalThinkingIndex}`, // Unique ID using global counter
-            isComplete: true,
-            thinkingBlockIndex: globalThinkingIndex, // Global thinking block index
-          });
-          globalThinkingIndex += 1;
-        }
-        // Remove from content to avoid double processing
-        partProcessedContent = partProcessedContent.replace(match[0], '');
-      });
 
-      // Then, handle incomplete thinking blocks (streaming)
-      const incompleteThinkingMatch = partProcessedContent.match(
-        /<think>(.*?)(?!<\/think>)$/s,
+      // Then handle any remaining text content
+      processTextContentBlocks(
+        partProcessedContent,
+        index,
+        contentBlocks,
+        messageId,
       );
-      if (incompleteThinkingMatch) {
-        const thinkingContent = incompleteThinkingMatch[1];
-        if (thinkingContent.trim()) {
-          contentBlocks.push({
-            type: 'thinking',
-            thinkingContent,
-            id: `thinking-global-${globalThinkingIndex}`, // Unique ID using global counter
-            isComplete: false,
-            thinkingBlockIndex: globalThinkingIndex, // Global thinking block index
-          });
-          globalThinkingIndex += 1;
-        }
-        // Remove from content
-        partProcessedContent = partProcessedContent.replace(
-          incompleteThinkingMatch[0],
-          '',
-        );
-      }
-
-      // Handle any remaining text content
-      if (partProcessedContent.trim()) {
-        contentBlocks.push({
-          type: 'text',
-          content: safeStringify(partProcessedContent),
-          id: `text-${index}`,
-        });
-      }
     }
   });
 
-  // Add any remaining tool calls at the end (fallback for tools without position markers)
-  // First add remaining content-parsed tool calls
-  while (currentToolCallIndex < toolCallsArray.length) {
-    const toolCall = toolCallsArray[currentToolCallIndex];
-
-    // Check if we already have this tool call from execution events
-    const existingEventBlock = executionEventBlocks.get(toolCall.name);
-    if (existingEventBlock) {
-      // Create COPY of execution event data merged with content data (avoid shared references)
-      const mergedToolCall = {
-        ...existingEventBlock, // Spread creates new object
-        arguments: toolCall.arguments || existingEventBlock.arguments,
-        result: toolCall.result || existingEventBlock.result,
-        isExecuting:
-          toolCall.isExecuting !== undefined
-            ? toolCall.isExecuting
-            : existingEventBlock.isExecuting,
-        duration_ms: toolCall.duration_ms || existingEventBlock.duration_ms,
-        isError:
-          toolCall.isError !== undefined
-            ? toolCall.isError
-            : existingEventBlock.isError,
-        executionEventId: existingEventBlock.executionEventId, // Preserve event ID
-      };
-
-      contentBlocks.push({
-        type: 'tool_call',
-        toolCall: {
-          ...mergedToolCall,
-          blockIndex: currentToolCallIndex,
-        },
-        id: `tool-merged-${currentToolCallIndex}`,
-      });
-    } else {
-      // No existing event block, create new one (fallback)
-      contentBlocks.push({
-        type: 'tool_call',
-        toolCall: {
-          ...toolCall,
-          blockIndex: currentToolCallIndex,
-        },
-        id: `tool-remaining-${currentToolCallIndex}`,
-      });
-    }
-    currentToolCallIndex += 1;
-  }
-
-  // Then add any execution event blocks that weren't matched with content
-  const usedEventBlockNames = new Set(
-    contentBlocks
-      .filter((block) => block.type === 'tool_call')
-      .map((block) => block.toolCall?.name)
-      .filter(Boolean),
-  );
-
-  Array.from(executionEventBlocks.entries()).forEach(
-    ([name, eventBlock], orphanIndex) => {
-      if (!usedEventBlockNames.has(name)) {
-        contentBlocks.push({
-          type: 'tool_call',
-          toolCall: {
-            ...eventBlock, // Create copy to avoid shared references
-            blockIndex: currentToolCallIndex + orphanIndex,
-          },
-          id: `tool-event-orphan-${name}`,
-        });
-      }
-    },
-  );
+  // Removed addRemainingToolCalls - no more extra tool calls
 
   // Return properly ordered content blocks
-  // Merge tool calls from both content parsing and execution events
-  const allToolCalls = [
-    ...Array.from(toolCallsMap.values()),
-    ...Array.from(executionEventBlocks.values()),
-  ];
-
-  // Remove duplicates by tool name
-  const uniqueToolCalls = allToolCalls.reduce((acc, toolCall) => {
-    const existing = acc.find((tc: any) => tc.name === toolCall.name);
-    if (!existing) {
-      // Create COPY to avoid shared references
-      acc.push({ ...toolCall });
-    } else if (toolCall.arguments && toolCall.arguments !== 'Loading...') {
-      // Create MERGED copy instead of modifying existing (prevents shared reference issues)
-      const preservedIsExecuting = existing.isExecuting;
-      const mergedToolCall = { ...existing, ...toolCall };
-      // If the new tool call doesn't have isExecuting set, preserve the old value
-      if (
-        toolCall.isExecuting === undefined &&
-        preservedIsExecuting !== undefined
-      ) {
-        mergedToolCall.isExecuting = preservedIsExecuting;
-      }
-      // Replace the existing with the merged copy
-      const existingIndex = acc.findIndex(
-        (tc: any) => tc.name === toolCall.name,
-      );
-      acc[existingIndex] = mergedToolCall;
-    }
-    return acc;
-  }, [] as any[]);
-
   return {
     contentBlocks,
-    toolCalls: uniqueToolCalls,
+    toolCalls: [], // Remove the complex merging - contentBlocks is what actually gets rendered
     thinkingBlocks: contentBlocks
       .filter((block) => block.type === 'thinking')
       .map((block) => safeStringify(block.thinkingContent || '')),
@@ -651,7 +559,10 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { contentBlocks } = processMessageContent(message.content);
+        const { contentBlocks } = processMessageContent(
+          message.content,
+          message.id,
+        );
 
         // For each tool call block, if dropdown isn't explicitly set, open it
         const toolCallBlocks = contentBlocks.filter(
@@ -696,7 +607,10 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { contentBlocks } = processMessageContent(message.content);
+        const { contentBlocks } = processMessageContent(
+          message.content,
+          message.id,
+        );
 
         // For each executing tool, scroll its dropdown to bottom if open
         const toolCallBlocks = contentBlocks.filter(
@@ -794,7 +708,10 @@ function ChatInterface({
   useEffect(() => {
     messages.forEach((message) => {
       if (message.sender === 'assistant') {
-        const { contentBlocks } = processMessageContent(message.content);
+        const { contentBlocks } = processMessageContent(
+          message.content,
+          message.id,
+        );
 
         // For each tool call block, check if it should auto-collapse
         const toolCallBlocks = contentBlocks.filter(
@@ -897,330 +814,46 @@ function ChatInterface({
       </div>
 
       <div className="messages-container">
-        {messages.map((message) => {
-          const { contentBlocks } = processMessageContent(message.content);
+        {messages.map((message, messageIndex) => {
+          const { contentBlocks } = processMessageContent(
+            message.content,
+            message.id,
+          );
 
           return (
-            <MessageErrorBoundary key={message.id} messageId={message.id}>
-              <div
-                className={`message ${message.sender === 'user' ? 'user-message' : 'assistant-message'}`}
-              >
-                {message.sender === 'assistant' ? (
-                  <div className="assistant-message-content">
-                    {/* Sequential rendering of content blocks */}
-                    {contentBlocks.map((block, blockIndex) => {
-                      if (block.type === 'text') {
-                        try {
-                          // Ensure content is a string before rendering
-                          const safeContent = safeStringify(
-                            block.content || '',
-                          );
-                          return (
-                            <div
-                              key={block.id || blockIndex}
-                              className="text-block"
-                            >
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {safeContent}
-                              </ReactMarkdown>
-                            </div>
-                          );
-                        } catch (error) {
-                          log.error('Error rendering text block:', error);
-                          return (
-                            <div
-                              key={block.id || blockIndex}
-                              className="text-block error"
-                            >
-                              <p
-                                style={{
-                                  color: '#ff6b6b',
-                                  fontStyle: 'italic',
-                                }}
-                              >
-                                [Error rendering content - content may be
-                                corrupted]
-                              </p>
-                            </div>
-                          );
-                        }
-                      }
-
-                      if (block.type === 'tool_call' && block.toolCall) {
-                        // Use the stored block index for state management
-                        const toolCallIndex = block.toolCall.blockIndex ?? 0;
-
-                        if (!toolCallsRefs.current[message.id]) {
-                          toolCallsRefs.current[message.id] = {};
-                        }
-
-                        return (
-                          <div
-                            key={block.id || blockIndex}
-                            className="individual-tool-call"
-                            style={{ marginBottom: '12px' }}
-                          >
-                            <button
-                              type="button"
-                              className={`thinking-header ${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? '' : 'collapsed'}`}
-                              onClick={() =>
-                                toggleToolCall(message.id, toolCallIndex)
-                              }
-                              aria-expanded={
-                                collapsedToolCalls[message.id]?.[
-                                  toolCallIndex
-                                ] === false
-                              }
-                              aria-label={`${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? 'Collapse' : 'Expand'} ${block.toolCall.name} tool call`}
-                            >
-                              <div className="header-content">
-                                <div className="header-text">
-                                  {block.toolCall.name}
-                                </div>
-                                <div className="header-badges">
-                                  {(() => {
-                                    // Get execution state for this specific tool call
-                                    const messageExecutions =
-                                      executionState[message.id] || {};
-
-                                    // Get execution state by event ID
-                                    const thisToolExecution = block.toolCall
-                                      .executionEventId
-                                      ? messageExecutions[
-                                          block.toolCall.executionEventId
-                                        ]
-                                      : null;
-
-                                    const isExecuting =
-                                      thisToolExecution?.status === 'executing';
-                                    const completedTool =
-                                      thisToolExecution?.status === 'complete'
-                                        ? thisToolExecution
-                                        : null;
-
-                                    return (
-                                      <>
-                                        {completedTool?.isError && (
-                                          <span className="error-badge">
-                                            Error
-                                          </span>
-                                        )}
-                                        {isExecuting && (
-                                          <span className="executing-badge">
-                                            Executing...
-                                          </span>
-                                        )}
-                                        {completedTool?.duration_ms && (
-                                          <span className="time-badge">
-                                            {formatDuration(
-                                              completedTool.duration_ms,
-                                            )}
-                                          </span>
-                                        )}
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              </div>
-                            </button>
-                            <div
-                              ref={(el) => {
-                                if (!toolCallsRefs.current[message.id]) {
-                                  toolCallsRefs.current[message.id] = {};
-                                }
-                                toolCallsRefs.current[message.id][
-                                  toolCallIndex
-                                ] = el;
-                              }}
-                              className={`thinking-content ${collapsedToolCalls[message.id]?.[toolCallIndex] === false ? '' : 'collapsed'}`}
-                            >
-                              <div className="tool-call-block">
-                                <div className="tool-call-args">
-                                  <div className="section-label">
-                                    Arguments:
-                                  </div>
-                                  <pre className="code-block">
-                                    {safeStringify(block.toolCall.arguments)}
-                                  </pre>
-                                </div>
-                                <div className="tool-call-result">
-                                  <div className="section-label">Result:</div>
-                                  <div
-                                    className={`result-content ${block.toolCall.isError ? 'error' : ''}`}
-                                  >
-                                    {safeStringify(block.toolCall.result)}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      if (block.type === 'thinking') {
-                        try {
-                          // Ensure thinking content is a string before rendering
-                          const safeThinkingContent = safeStringify(
-                            block.thinkingContent || '',
-                          );
-                          // Use block ID and thinking index
-                          const blockThinkingIndex =
-                            block.thinkingBlockIndex ?? 0;
-                          const blockId =
-                            block.id || `thinking-${blockThinkingIndex}`;
-
-                          // Find execution state for THIS specific thinking block
-                          const allThinkingExecutions = Object.values(
-                            executionState[message.id] || {},
-                          ).filter((e) => e.type === 'thinking');
-
-                          // Use the stable thinking block index if available
-                          const thisBlockExecution =
-                            allThinkingExecutions[blockThinkingIndex] || null;
-
-                          const isThinking =
-                            thisBlockExecution?.status === 'executing';
-                          const isCompleted =
-                            thisBlockExecution?.status === 'complete';
-
-                          return (
-                            <div
-                              key={blockId}
-                              className="thinking-section"
-                              style={{ marginBottom: '12px' }}
-                            >
-                              <button
-                                type="button"
-                                className={`thinking-header ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
-                                onClick={() => toggleThinking(blockId)}
-                                aria-expanded={!collapsedThinking[blockId]}
-                                aria-label={`${collapsedThinking[blockId] ? 'Expand' : 'Collapse'} reasoning section`}
-                              >
-                                <div className="header-content">
-                                  <div className="header-text">Reasoning</div>
-                                  <div className="header-badges">
-                                    {isThinking && (
-                                      <span className="executing-badge">
-                                        Thinking...
-                                      </span>
-                                    )}
-                                    {isCompleted &&
-                                      thisBlockExecution?.duration_ms && (
-                                        <span className="time-badge">
-                                          {formatDuration(
-                                            thisBlockExecution.duration_ms,
-                                          )}
-                                        </span>
-                                      )}
-                                  </div>
-                                </div>
-                              </button>
-                              <div
-                                ref={(el) => {
-                                  thinkingBlockRefs.current[blockId] = el;
-                                }}
-                                className={`thinking-content ${collapsedThinking[blockId] ? 'collapsed' : ''}`}
-                              >
-                                <div className="thinking-block">
-                                  {safeThinkingContent}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        } catch (error) {
-                          log.error('Error rendering thinking block:', error);
-                          return (
-                            <div
-                              key={block.id || blockIndex}
-                              className="thinking-section error"
-                            >
-                              <p
-                                style={{
-                                  color: '#ff6b6b',
-                                  fontStyle: 'italic',
-                                }}
-                              >
-                                [Error rendering thinking content]
-                              </p>
-                            </div>
-                          );
-                        }
-                      }
-
-                      return null;
-                    })}
-
-                    <div className="message-actions">
-                      <button
-                        type="button"
-                        className="copy-button"
-                        onClick={() =>
-                          navigator.clipboard.writeText(message.content)
-                        }
-                        title="Copy"
-                        aria-label="Copy"
-                      >
-                        <Clipboard size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  message.content
-                )}
-              </div>
-            </MessageErrorBoundary>
+            <MessageBlock
+              key={message.id}
+              message={message}
+              messageIndex={messageIndex}
+              isLoading={isLoading}
+              contentBlocks={contentBlocks}
+              collapsedToolCalls={collapsedToolCalls}
+              manuallyToggledToolCalls={manuallyToggledToolCalls}
+              toggleToolCall={toggleToolCall}
+              executionState={executionState}
+              toolCallsRefs={toolCallsRefs}
+              collapsedThinking={collapsedThinking}
+              toggleThinking={toggleThinking}
+              thinkingBlockRefs={thinkingBlockRefs}
+              formatDuration={formatDuration}
+              safeStringify={safeStringify}
+              totalMessages={messages.length}
+            />
           );
         })}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="input-section">
-        <div className="input-wrapper">
-          <div className="input-container">
-            <div className="input-row">
-              <textarea
-                ref={textareaRef}
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="What's next?"
-                className="message-input"
-                disabled={isLoading}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    handleSendMessage(e);
-                  }
-                }}
-                style={{
-                  resize: 'none',
-                  maxHeight: '30vh',
-                  minHeight: '18px',
-                  lineHeight: '18px',
-                  padding: '6px 10px',
-                }}
-              />
-              {isLoading && (
-                <button
-                  type="button"
-                  onClick={handleCancelMessage}
-                  className="cancel-button"
-                  aria-label="Cancel generation"
-                >
-                  ✕
-                </button>
-              )}
-              {hasMessages && !isLoading && (
-                <button
-                  type="button"
-                  onClick={handleResetChat}
-                  className="reset-button"
-                  aria-label="Clear chat"
-                  disabled={isLoading}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <ChatInput
+        inputMessage={inputMessage}
+        setInputMessage={setInputMessage}
+        isLoading={isLoading}
+        hasMessages={hasMessages}
+        textareaRef={textareaRef}
+        handleSendMessage={handleSendMessage}
+        handleCancelMessage={handleCancelMessage}
+        handleResetChat={handleResetChat}
+      />
     </div>
   );
 }

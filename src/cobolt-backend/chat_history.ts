@@ -56,7 +56,7 @@ class ChatHistory {
 
   /**
    * Convert chat history to format used by Ollama LLM
-   * CLEAN ARCHITECTURE: Removes execution metadata from AI context
+   * Removes execution event metadata from AI context
    * @returns Array of Message objects in Ollama format with clean content
    */
   toOllamaMessages(): Message[] {
@@ -68,7 +68,7 @@ class ChatHistory {
 
   /**
    * Clean content for AI context - removes ALL execution metadata
-   * This prevents AI from learning fake execution patterns
+   * This prevents AI from learning how to fake execution patterns
    */
   private cleanContentForAI(content: string): string {
     let cleaned = content;
