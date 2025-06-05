@@ -117,7 +117,6 @@ interface ExecutionEvent {
   isError?: boolean;
 }
 
-// Legacy interface for backward compatibility during transition
 interface ExecutionState {
   [id: string]: {
     type: 'tool' | 'thinking';
@@ -152,8 +151,7 @@ const processExecutionEvents = (
 
 // Sequential content parsing for inline tool rendering
 const processMessageContent = (content: string) => {
-  // Clean execution events from content first and extract events
-  // NEW: Create immediate tool call dropdowns from execution events for better UX
+  // Create immediate tool call dropdowns from execution events
   const { cleanContent, events } = processExecutionEvents(content);
   const processedContent = cleanContent;
 
@@ -164,7 +162,7 @@ const processMessageContent = (content: string) => {
     thinkingContent?: string;
     id?: string;
     isComplete?: boolean;
-    thinkingBlockIndex?: number; // For stable thinking block mapping
+    thinkingBlockIndex?: number;
   }> = [];
 
   // Store immediate tool call data from execution events (don't add to contentBlocks yet)
@@ -488,9 +486,9 @@ const processMessageContent = (content: string) => {
     ...Array.from(executionEventBlocks.values()),
   ];
 
-  // Remove duplicates by tool name (prefer content-parsed versions)
+  // Remove duplicates by tool name
   const uniqueToolCalls = allToolCalls.reduce((acc, toolCall) => {
-    const existing = acc.find((tc) => tc.name === toolCall.name);
+    const existing = acc.find((tc: any) => tc.name === toolCall.name);
     if (!existing) {
       // Create COPY to avoid shared references
       acc.push({ ...toolCall });
@@ -506,7 +504,9 @@ const processMessageContent = (content: string) => {
         mergedToolCall.isExecuting = preservedIsExecuting;
       }
       // Replace the existing with the merged copy
-      const existingIndex = acc.findIndex((tc) => tc.name === toolCall.name);
+      const existingIndex = acc.findIndex(
+        (tc: any) => tc.name === toolCall.name,
+      );
       acc[existingIndex] = mergedToolCall;
     }
     return acc;
@@ -541,7 +541,6 @@ function ChatInterface({
   const [manuallyToggledThinking, setManuallyToggledThinking] = useState<{
     [blockId: string]: boolean;
   }>({});
-  // Legacy execution state (for backward compatibility during transition)
   const [executionState, setExecutionState] = useState<{
     [messageId: string]: ExecutionState;
   }>({});
