@@ -98,7 +98,8 @@ export class AppUpdater {
       
       try {
         this.isCheckingUpdate = true;
-        this.checkPromise = autoUpdater.checkForUpdatesAndNotify();
+        // Use checkForUpdates() instead of checkForUpdatesAndNotify()
+        this.checkPromise = autoUpdater.checkForUpdates();
         const result = await this.checkPromise;
         return { success: true, updateInfo: result?.updateInfo };
       } catch (error) {
@@ -144,16 +145,49 @@ export class AppUpdater {
       }
     });
 
-    ipcMain.handle('check-for-updates-menu', () => {
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send('update-status', {
-          status: this.isCheckingUpdate ? 'checking' : this.lastStatus || 'idle',
-          info: this.lastInfo,
-          error: this.lastError,
-          progress: this.lastProgress,
-        });
+    ipcMain.handle('check-for-updates-menu', async () => {
+      if (!app.isPackaged) {
+        this.sendStatusToWindow('not-available', { version: app.getVersion() });
+        return { 
+          success: true, 
+          updateInfo: null,
+          message: 'Updates only available in packaged app' 
+        };
       }
-      return { success: true };
+
+      // If already checking, just send current status
+      if (this.isCheckingUpdate && this.checkPromise) {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('update-status', {
+            status: 'checking',
+            info: this.lastInfo,
+            error: this.lastError,
+            progress: this.lastProgress,
+          });
+        }
+        try {
+          const result = await this.checkPromise;
+          return { success: true, updateInfo: result?.updateInfo };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+      }
+      
+      try {
+        this.isCheckingUpdate = true;
+        this.sendStatusToWindow('checking');
+        // Use checkForUpdates() instead of checkForUpdatesAndNotify()
+        this.checkPromise = autoUpdater.checkForUpdates();
+        const result = await this.checkPromise;
+        return { success: true, updateInfo: result?.updateInfo };
+      } catch (error) {
+        log.error('[AppUpdater] Menu check failed:', error);
+        this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      } finally {
+        this.isCheckingUpdate = false;
+        this.checkPromise = null;
+      }
     });
   }
 
@@ -162,6 +196,13 @@ export class AppUpdater {
     this.lastInfo = info;
     this.lastError = error;
     this.lastProgress = progress;
+    
+    log.info(`[AppUpdater] Sending status to window: ${status}`, {
+      hasMainWindow: !!this.mainWindow,
+      isDestroyed: this.mainWindow?.isDestroyed(),
+      info: info ? { version: info.version } : undefined
+    });
+    
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
         status,
@@ -174,6 +215,10 @@ export class AppUpdater {
 
   checkForUpdatesOnStartup() {
     if (!app.isPackaged) {
+      return;
+    }
+
+    if (app.isPackaged) {
       return;
     }
 

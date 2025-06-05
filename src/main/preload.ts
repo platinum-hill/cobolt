@@ -27,10 +27,11 @@ const validChannels = {
     'report-error',
     'refresh-mcp-connections',
     'check-for-updates',
+    'check-for-updates-menu',
     'download-update',
     'install-update',
     'get-update-status',
-    'get-app-version', // Add this
+    'get-app-version',
   ],
   on: [
     'message-response',

@@ -30,6 +30,9 @@ function UpdateNotification() {
   useEffect(() => {
     mounted.current = true;
     
+    // Add logging to confirm listener setup
+    log.info('[UpdateNotification] Setting up event listeners');
+    
     // Get current version
     window.electron.ipcRenderer.invoke('get-app-version').then((version) => {
       if (mounted.current) {
@@ -63,6 +66,14 @@ function UpdateNotification() {
 
     // Listen for update status changes
     const handleUpdateStatus = (_event: any, data: any) => {
+      log.info(`[UpdateNotification] Received update status: ${data.status}`, {
+        info: data.info ? { version: data.info.version } : undefined,
+        error: data.error,
+        mounted: mounted.current,
+        userDismissed,
+        currentUpdateVersion: updateStatus.info?.version
+      });
+      
       if (!mounted.current) return;
       
       // Clear any existing hide timeout
@@ -74,6 +85,7 @@ function UpdateNotification() {
       // Don't show notification if user dismissed and it's the same update
       if (userDismissed && data.status === 'available' && 
           updateStatus.info?.version === data.info?.version) {
+        log.info('[UpdateNotification] Skipping notification - user dismissed this version');
         return;
       }
       
@@ -84,8 +96,12 @@ function UpdateNotification() {
         progress: data.progress
       });
       
-      // Show notification for all statuses except idle
-      if (data.status !== 'idle') {
+      // Always show notification for important statuses
+      if (data.status === 'available' || data.status === 'downloading' || 
+          data.status === 'downloaded' || data.status === 'error') {
+        log.info(`[UpdateNotification] Showing notification for status: ${data.status}`);
+        setShowNotification(true);
+      } else if (data.status !== 'idle') {
         setShowNotification(true);
         
         // Auto-hide "not-available" after 3 seconds
@@ -100,21 +116,72 @@ function UpdateNotification() {
     };
 
     // Listen for menu-triggered update checks
-    const handleCheckForUpdatesMenu = () => {
+    const handleCheckForUpdatesMenu = async () => {
       if (!mounted.current) return;
 
+      log.info('Received check-for-updates-menu event');
       setUserDismissed(false);
+
+      // Clear any existing hide timeout
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+        hideTimeoutRef.current = null;
+      }
 
       // Show checking status immediately
       setUpdateStatus({ status: 'checking' });
       setShowNotification(true);
 
-      // Then invoke the check (status will be updated via 'update-status' event)
-      window.electron.ipcRenderer.invoke('check-for-updates');
+      // Actually invoke the check-for-updates-menu handler
+      try {
+        const result = await window.electron.ipcRenderer.invoke('check-for-updates-menu');
+        log.info('[UpdateNotification] check-for-updates-menu result:', result);
+        
+        // Handle the result directly since IPC events aren't working
+        if (result.success && result.updateInfo) {
+          // Update available
+          setUpdateStatus({ 
+            status: 'available', 
+            info: { 
+              version: result.updateInfo.version,
+              releaseNotes: result.updateInfo.releaseNotes,
+              releaseDate: result.updateInfo.releaseDate
+            }
+          });
+          setShowNotification(true);
+          log.info(`[UpdateNotification] Showing notification for available update: ${result.updateInfo.version}`);
+        } else if (result.success && !result.updateInfo) {
+          // No update available
+          setUpdateStatus({ status: 'not-available' });
+          setShowNotification(true);
+          // Auto-hide after 3 seconds
+          hideTimeoutRef.current = setTimeout(() => {
+            if (mounted.current) {
+              setShowNotification(false);
+            }
+          }, 3000);
+        } else {
+          // Error
+          setUpdateStatus({ status: 'error', error: result.error || 'Unknown error' });
+          setShowNotification(true);
+        }
+      } catch (error) {
+        log.error('Failed to check for updates:', error);
+        setUpdateStatus({ status: 'error', error: error instanceof Error ? error.message : 'Unknown error' });
+        setShowNotification(true);
+      }
+    };
+
+    // Test listener to verify IPC communication
+    const testHandler = (data: any) => {
+      log.info('[UpdateNotification] TEST: Received any update-status event:', data);
     };
 
     // Use the existing IPC pattern
+    log.info('[UpdateNotification] Adding update-status listener');
     window.electron.ipcRenderer.on('update-status', handleUpdateStatus);
+    window.electron.ipcRenderer.on('update-status', testHandler);
+    log.info('[UpdateNotification] Adding check-for-updates-menu listener');
     window.electron.ipcRenderer.on('check-for-updates-menu', handleCheckForUpdatesMenu);
 
     return () => {
@@ -122,10 +189,12 @@ function UpdateNotification() {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
+      log.info('[UpdateNotification] Removing listeners');
       window.electron.ipcRenderer.removeListener('update-status', handleUpdateStatus);
+      window.electron.ipcRenderer.removeListener('update-status', testHandler);
       window.electron.ipcRenderer.removeListener('check-for-updates-menu', handleCheckForUpdatesMenu);
     };
-  }, [userDismissed, updateStatus.info?.version]);
+  }, []);
 
   const handleDownload = async () => {
     const result = await window.electron.ipcRenderer.invoke('download-update');
