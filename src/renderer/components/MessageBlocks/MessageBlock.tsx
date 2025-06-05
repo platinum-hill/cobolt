@@ -10,7 +10,6 @@ interface MessageBlockProps {
   isLoading: boolean;
   contentBlocks: any[];
   collapsedToolCalls: any;
-  manuallyToggledToolCalls: any;
   toggleToolCall: (messageId: string, toolIndex: number) => void;
   executionState: any;
   toolCallsRefs: React.MutableRefObject<any>;
@@ -28,7 +27,6 @@ function MessageBlock({
   isLoading,
   contentBlocks,
   collapsedToolCalls,
-  manuallyToggledToolCalls,
   toggleToolCall,
   executionState,
   toolCallsRefs,
@@ -78,7 +76,6 @@ function MessageBlock({
                     message={message}
                     blockIndex={blockIndex}
                     collapsedToolCalls={collapsedToolCalls}
-                    manuallyToggledToolCalls={manuallyToggledToolCalls}
                     toggleToolCall={toggleToolCall}
                     executionState={executionState}
                     toolCallsRefs={toolCallsRefs}

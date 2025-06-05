@@ -828,7 +828,6 @@ function ChatInterface({
               isLoading={isLoading}
               contentBlocks={contentBlocks}
               collapsedToolCalls={collapsedToolCalls}
-              manuallyToggledToolCalls={manuallyToggledToolCalls}
               toggleToolCall={toggleToolCall}
               executionState={executionState}
               toolCallsRefs={toolCallsRefs}
