@@ -71,11 +71,7 @@ const processExecutionEvents = (
 };
 
 // Helper function to process tool-related content blocks
-const processToolContentBlocks = (
-  processedContent: string,
-  executionEventBlocks: Map<string, any>,
-  eventIdsByToolName: Map<string, string>,
-) => {
+const processToolContentBlocks = (processedContent: string) => {
   const toolCallsMap = new Map<string, any>();
 
   // Process tool updates (executing status)
@@ -88,21 +84,7 @@ const processToolContentBlocks = (
       updateToolCalls.forEach((updateTool: any, index: number) => {
         const key = `${updateTool.name}-${JSON.stringify(updateTool.arguments)}-${index}`;
 
-        // Check if we already have a block from execution events
-        const eventId = eventIdsByToolName.get(updateTool.name);
-        const existingEventBlock = eventId
-          ? executionEventBlocks.get(eventId)
-          : null;
-        if (existingEventBlock) {
-          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
-          const updatedEventBlock = {
-            ...existingEventBlock,
-            arguments: JSON.stringify(updateTool.arguments, null, 2),
-            result: updateTool.result || 'Executing...',
-            isExecuting: updateTool.isExecuting !== false,
-          };
-          if (eventId) executionEventBlocks.set(eventId, updatedEventBlock);
-        }
+        // Skip event block linking for update - updates should modify existing tool calls in map
 
         toolCallsMap.set(key, updateTool);
       });
@@ -122,23 +104,7 @@ const processToolContentBlocks = (
         const key = `${completedTool.name}-${JSON.stringify(completedTool.arguments)}-${index}`;
         const existingTool = toolCallsMap.get(key);
 
-        // Also update the execution event block if it exists
-        const eventId = eventIdsByToolName.get(completedTool.name);
-        const existingEventBlock = eventId
-          ? executionEventBlocks.get(eventId)
-          : null;
-        if (existingEventBlock) {
-          // Create UPDATED copy instead of modifying original (prevents shared reference issues)
-          const completedEventBlock = {
-            ...existingEventBlock,
-            arguments: JSON.stringify(completedTool.arguments, null, 2),
-            result: completedTool.result || 'Completed',
-            isExecuting: false,
-            duration_ms: completedTool.duration_ms,
-            isError: completedTool.isError || false,
-          };
-          if (eventId) executionEventBlocks.set(eventId, completedEventBlock);
-        }
+        // Skip event block linking for completion - completions should modify existing tool calls in map
 
         toolCallsMap.set(key, {
           ...existingTool,
@@ -286,7 +252,6 @@ const processMessageContent = (content: string, messageId: string) => {
 
   // Store immediate tool call data from execution events (don't add to contentBlocks yet)
   const executionEventBlocks = new Map<string, any>();
-  const eventIdsByToolName = new Map<string, string>();
 
   events.forEach((event) => {
     if (event.type === 'tool_start') {
@@ -301,16 +266,11 @@ const processMessageContent = (content: string, messageId: string) => {
       };
 
       executionEventBlocks.set(event.id, immediateToolCall);
-      eventIdsByToolName.set(event.name || 'unknown', event.id);
     }
   });
 
   // Process all tool-related content blocks
-  const toolCallsMap = processToolContentBlocks(
-    processedContent,
-    executionEventBlocks,
-    eventIdsByToolName,
-  );
+  const toolCallsMap = processToolContentBlocks(processedContent);
 
   // Parse content using position markers for true inline tool calls
   // Split by position markers to get exact tool call locations
@@ -327,10 +287,16 @@ const processMessageContent = (content: string, messageId: string) => {
       // Try to find execution event block for this position
       let toolCallToUse = null;
 
+      // Match tool calls to execution events by position instead of name
+      const executionEventsList = Array.from(executionEventBlocks.values());
+
       if (currentToolCallIndex < toolCallsArray.length) {
         const contentToolCall = toolCallsArray[currentToolCallIndex];
-        const eventId = eventIdsByToolName.get(contentToolCall.name);
-        const eventBlock = eventId ? executionEventBlocks.get(eventId) : null;
+        // Match by position: first tool call gets first execution event, etc.
+        const eventBlock =
+          currentToolCallIndex < executionEventsList.length
+            ? executionEventsList[currentToolCallIndex]
+            : null;
 
         if (eventBlock) {
           // Create a COPY of execution event block to avoid shared references
@@ -352,18 +318,10 @@ const processMessageContent = (content: string, messageId: string) => {
         } else {
           toolCallToUse = contentToolCall;
         }
-      } else {
-        // No content tool call yet, check if we have any unused execution event blocks
-        const unusedEventBlocks = Array.from(
-          executionEventBlocks.values(),
-        ).filter(
-          (block) => !toolCallsArray.some((tc) => tc.name === block.name),
-        );
-
-        if (unusedEventBlocks.length > 0) {
-          // Create COPY to avoid shared reference issues
-          toolCallToUse = { ...unusedEventBlocks[0] };
-        }
+      } else if (currentToolCallIndex < executionEventsList.length) {
+        // No content tool call yet, use next available execution event block
+        // Create COPY to avoid shared reference issues
+        toolCallToUse = { ...executionEventsList[currentToolCallIndex] };
       }
 
       if (toolCallToUse) {
