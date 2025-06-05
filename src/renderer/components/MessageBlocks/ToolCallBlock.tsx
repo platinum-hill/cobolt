@@ -1,5 +1,4 @@
 import React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface ToolCallBlockProps {
   block: any;
@@ -89,13 +88,6 @@ function ToolCallBlock({
               );
             })()}
           </div>
-        </div>
-        <div className="header-icon">
-          {collapsedToolCalls[message.id]?.[toolCallIndex] === false ? (
-            <ChevronUp size={16} />
-          ) : (
-            <ChevronDown size={16} />
-          )}
         </div>
       </button>
       <div
