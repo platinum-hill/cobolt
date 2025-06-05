@@ -1,0 +1,154 @@
+.update-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #2A2F35;
+  border: 1px solid #7CA97E;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+  max-width: 400px;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.update-banner {
+  background: rgba(42, 47, 53, 0.95);
+  border: 1px solid rgba(124, 169, 126, 0.3);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.update-banner.error {
+  border-color: rgba(229, 57, 53, 0.3);
+}
+
+.update-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #C5D8BC;
+  flex: 1;
+}
+
+.update-content.checking,
+.update-content.downloading {
+  color: #8FB996;
+}
+
+.update-content.up-to-date {
+  color: #7CA97E;
+}
+
+.update-content.error {
+  color: #E53935;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #8FB996;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.update-icon {
+  font-size: 20px;
+}
+
+.update-button {
+  padding: 6px 16px;
+  background-color: #7CA97E;
+  color: #1E2329;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.update-button:hover {
+  background-color: #8FB996;
+}
+
+.dismiss-button {
+  padding: 6px 12px;
+  background-color: transparent;
+  color: #8A9BA8;
+  border: 1px solid #3A424A;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dismiss-button:hover {
+  border-color: #8A9BA8;
+  color: #C5D8BC;
+}
+
+.progress-bar {
+  width: 100px;
+  height: 6px;
+  background-color: #3A424A;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #7CA97E;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #8A9BA8;
+}
+
+.error-detail {
+  font-size: 12px;
+  color: #8A9BA8;
+  display: block;
+  margin-top: 4px;
+}
+
+.update-notification p {
+  margin: 0;
+  color: #C5D8BC;
+  font-size: 14px;
+}
+
+/* Auto-hide animation for up-to-date notification */
+.update-notification.not-available {
+  animation: slideIn 0.3s ease-out, fadeOut 0.5s ease-out 2.5s forwards;
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
