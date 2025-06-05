@@ -86,7 +86,7 @@ const processToolContentBlocks = (
     try {
       const updateToolCalls = JSON.parse(match[1]);
       updateToolCalls.forEach((updateTool: any, index: number) => {
-        const key = `${updateTool.name}-${JSON.stringify(updateTool.arguments)}-${Date.now()}-${index}`;
+        const key = `${updateTool.name}-${JSON.stringify(updateTool.arguments)}-${index}`;
 
         // Check if we already have a block from execution events
         const eventId = eventIdsByToolName.get(updateTool.name);
@@ -119,7 +119,7 @@ const processToolContentBlocks = (
     try {
       const completedToolCalls = JSON.parse(match[1]);
       completedToolCalls.forEach((completedTool: any, index: number) => {
-        const key = `${completedTool.name}-${JSON.stringify(completedTool.arguments)}-${Date.now()}-${index}`;
+        const key = `${completedTool.name}-${JSON.stringify(completedTool.arguments)}-${index}`;
         const existingTool = toolCallsMap.get(key);
 
         // Also update the execution event block if it exists
@@ -159,7 +159,7 @@ const processToolContentBlocks = (
     try {
       const finalToolCalls = JSON.parse(toolCallMatch[1]);
       finalToolCalls.forEach((finalTool: any, index: number) => {
-        const key = `${finalTool.name}-${JSON.stringify(finalTool.arguments)}-${Date.now()}-${index}`;
+        const key = `${finalTool.name}-${JSON.stringify(finalTool.arguments)}-${index}`;
         const existingTool = toolCallsMap.get(key);
         toolCallsMap.set(key, {
           ...finalTool,
@@ -250,7 +250,6 @@ const processTextContentBlocks = (
 const addToolCallContentBlock = (
   toolCallToUse: any,
   currentToolCallIndex: number,
-  toolFromEvents: boolean,
   contentBlocks: any[],
   messageId: string,
 ) => {
@@ -260,9 +259,7 @@ const addToolCallContentBlock = (
       ...toolCallToUse,
       blockIndex: currentToolCallIndex, // Store the intended index
     },
-    id: toolFromEvents
-      ? `tool-event-${messageId}-${currentToolCallIndex}`
-      : `tool-${messageId}-${currentToolCallIndex}`,
+    id: `tool-${messageId}-${currentToolCallIndex}`,
   });
 };
 
@@ -329,7 +326,6 @@ const processMessageContent = (content: string, messageId: string) => {
 
       // Try to find execution event block for this position
       let toolCallToUse = null;
-      let toolFromEvents = false;
 
       if (currentToolCallIndex < toolCallsArray.length) {
         const contentToolCall = toolCallsArray[currentToolCallIndex];
@@ -353,7 +349,6 @@ const processMessageContent = (content: string, messageId: string) => {
                 : eventBlock.isError,
             executionEventId: eventBlock.executionEventId, // Preserve event ID for badge mapping
           };
-          toolFromEvents = true;
         } else {
           toolCallToUse = contentToolCall;
         }
@@ -368,7 +363,6 @@ const processMessageContent = (content: string, messageId: string) => {
         if (unusedEventBlocks.length > 0) {
           // Create COPY to avoid shared reference issues
           toolCallToUse = { ...unusedEventBlocks[0] };
-          toolFromEvents = true;
         }
       }
 
@@ -376,7 +370,6 @@ const processMessageContent = (content: string, messageId: string) => {
         addToolCallContentBlock(
           toolCallToUse,
           currentToolCallIndex,
-          toolFromEvents,
           contentBlocks,
           messageId,
         );

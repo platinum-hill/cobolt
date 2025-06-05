@@ -19,6 +19,25 @@ interface ExecutionEvent {
 }
 
 class QueryEngine {
+  private createToolCallErrorInfo(toolName: string, toolArguments: string, errorMessage: string, duration_ms: number) {
+    return {
+      name: toolName,
+      arguments: toolArguments,
+      result: errorMessage,
+      isError: true,
+      duration_ms
+    };
+  }
+  private createToolCallSuccessInfo(toolName: string, toolArguments: string, resultText: string, duration_ms: number, isError: boolean) {
+    return {
+      name: toolName,
+      arguments: toolArguments,
+      result: resultText,
+      isError: isError,
+      duration_ms
+    };
+  }
+
   private emitExecutionEvent(event: ExecutionEvent): string {
     return `<execution_event>${JSON.stringify(event)}</execution_event>`;
   }
@@ -229,7 +248,7 @@ class QueryEngine {
               // Find corresponding streaming tool to update its UI
               const streamingKey = `streaming-${toolName}`;
               const streamingTool = activeStreamingTools.get(streamingKey);
-              const displayToolId = streamingTool ? streamingTool.toolId : `tool-${toolName}-${Date.now()}`;
+              const displayToolId = streamingTool ? streamingTool.toolId : `tool-${toolCallKey.replace(/[^a-zA-Z0-9-]/g, '-')}`;
               
               // Add to final tool calls for conversation
               detectedToolCalls.push(toolCall);
@@ -256,13 +275,7 @@ class QueryEngine {
                 const errorMessage = `Tool '${toolName}' not found`;
                 
                 const duration_ms = Date.now() - toolStartTime;
-                const toolCallInfo = {
-                  name: toolName,
-                  arguments: toolArguments,
-                  result: errorMessage,
-                  isError: true,
-                  duration_ms
-                };
+                const toolCallInfo = this.createToolCallErrorInfo(toolName, toolArguments, errorMessage, duration_ms);
                 
                 // Add error to conversation
                 conversationMessages.push({
@@ -298,13 +311,7 @@ class QueryEngine {
                 
                 // Send completion immediately
                 const duration_ms = Date.now() - toolStartTime;
-                const toolCallInfo = {
-                  name: toolName,
-                  arguments: toolArguments,
-                  result: resultText,
-                  isError: toolResponse.isError,
-                  duration_ms
-                };
+                const toolCallInfo = this.createToolCallSuccessInfo(toolName, toolArguments, resultText, duration_ms, toolResponse.isError);
                 
                 yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: toolResponse.isError});
                 yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
@@ -319,13 +326,7 @@ class QueryEngine {
                 });
                 
                 const duration_ms = Date.now() - toolStartTime;
-                const toolCallInfo = {
-                  name: toolName,
-                  arguments: toolArguments,
-                  result: errorMessage,
-                  isError: true,
-                  duration_ms
-                };
+                const toolCallInfo = this.createToolCallErrorInfo(toolName, toolArguments, errorMessage, duration_ms);
                 
                 yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: true});
                 yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
@@ -362,108 +363,8 @@ class QueryEngine {
           break;
         }
         
-        // Execute tools and add results to conversation
-        for (const toolCall of detectedToolCalls) {
-          if (cancellationToken.isCancelled) {
-            break;
-          }
-          
-          const toolName = toolCall.function.name;
-          const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
-          const toolId = `tool-${toolName}-${Date.now()}`;
-          const toolStartTime = Date.now();
-          
-          yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
-          
-          TraceLogger.trace(requestContext, 'tool-start', `Executing ${toolName}`);
-          TraceLogger.trace(requestContext, 'tool-args', `Tool arguments: ${toolArguments}`);
-          TraceLogger.trace(requestContext, 'mcp-request', `MCP Request: ${JSON.stringify(toolCall, null, 2)}`);
-          
-          const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
-          
-          if (!tool || tool.type !== "mcp") {
-            const errorMessage = `Tool '${toolName}' not found`;
-            
-            // Add error to conversation
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            continue;
-          }
-          
-          try {
-            const toolResponse = await tool.mcpFunction(requestContext, toolCall);
-            TraceLogger.trace(requestContext, 'tool-success', `Tool ${toolName} completed`);
-            TraceLogger.trace(requestContext, 'tool-response', `Tool Response: ${JSON.stringify(toolResponse, null, 2)}`);
-            
-            let resultText = '';
-            if (toolResponse.isError) {
-              resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
-            } else if (!toolResponse.content || toolResponse.content.length === 0) {
-              resultText = 'Tool executed successfully (no content returned)';
-            } else {
-              resultText = toolResponse.content.map(item => 
-                item.type === "text" ? item.text as string : JSON.stringify(item)
-              ).join('');
-            }
-            
-            // Add tool result to conversation for AI context
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, resultText)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: resultText,
-              isError: toolResponse.isError,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: toolResponse.isError});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            
-          } catch (error: any) {
-            const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
-            TraceLogger.trace(requestContext, 'tool-error', errorMessage);
-            
-            // Add error to conversation
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-          }
-        }
+        // Tools are already executed immediately when they appear in the stream
+        // No need for second execution loop
         
         // Continue conversation with tool results
         // The loop will start another round with the updated conversation
