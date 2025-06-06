@@ -3,7 +3,7 @@ import { formatDateTime } from './datetime_parser';
 import { simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
-import { searchMemories, addToMemory } from './memory';
+import { searchMemories, addToMemory, isMemoryEnabled } from './memory';
 import { FunctionTool } from './ollama_tools';
 import { Message } from 'ollama';
 import  { ChatHistory } from './chat_history';
@@ -361,8 +361,8 @@ class QueryEngine {
           tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
         });
         
-        // SAVE TO MEMORY AFTER EVERY RESPONSE
-        if (chatContent.trim()) {
+        // SAVE TO MEMORY AFTER EVERY RESPONSE (if enabled)
+        if (isMemoryEnabled() && chatContent.trim()) {
           console.log('Saving response to memory:', chatContent.substring(0, 50) + '...');
           addToMemory([
             { role: 'user', content: requestContext.question },
@@ -381,12 +381,6 @@ class QueryEngine {
           conversationComplete = true;
           break;
         }
-        
-        // Tools are already executed immediately when they appear in the stream
-        // No need for second execution loop
-        
-        // Continue conversation with tool results
-        // The loop will start another round with the updated conversation
       }
       } catch (error) {
       console.error('Error in response generator:', error);
