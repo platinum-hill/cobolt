@@ -587,6 +587,7 @@ function ChatInterface({
       }
     });
   }, [messages, collapsedToolCalls, collapsedThinking]);
+
   // Process execution events
   useEffect(() => {
     messages.forEach((message) => {

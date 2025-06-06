@@ -19,6 +19,20 @@ interface ExecutionEvent {
 }
 
 class QueryEngine {
+  // Global set to prevent duplicate tool executions across query sessions
+  private globalExecutedToolIds = new Map<string, Set<string>>();
+  
+  /**
+   * Clear executed tool tracking for a specific request or all requests
+   */
+  public clearExecutedTools(requestId?: string): void {
+    if (requestId) {
+      this.globalExecutedToolIds.delete(requestId);
+    } else {
+      this.globalExecutedToolIds.clear();
+    }
+  }
+  
   private createToolCallErrorInfo(toolName: string, toolArguments: string, errorMessage: string, duration_ms: number) {
     return {
       name: toolName,
@@ -194,7 +208,12 @@ class QueryEngine {
           toolId: string;
           isComplete: boolean;
         }>();
-        const executedToolIds = new Set<string>();
+        // Use global executed tool tracking to prevent re-execution across query sessions
+        const requestId = requestContext.requestId;
+        if (!this.globalExecutedToolIds.has(requestId)) {
+          this.globalExecutedToolIds.set(requestId, new Set<string>());
+        }
+        const executedToolIds = this.globalExecutedToolIds.get(requestId)!;
         
         // Stream response and build tool calls incrementally
         for await (const part of response) {
