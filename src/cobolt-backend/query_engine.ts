@@ -3,7 +3,7 @@ import { formatDateTime } from './datetime_parser';
 import { simpleChatOllamaStream, getOllamaClient } from './ollama_client';
 import { MODELS } from './model_manager';
 import { createChatPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
-import { searchMemories, addToMemory } from './memory';
+import { searchMemories, addToMemory, isMemoryEnabled } from './memory';
 import { FunctionTool } from './ollama_tools';
 import { Message } from 'ollama';
 import  { ChatHistory } from './chat_history';
@@ -19,242 +19,61 @@ interface ExecutionEvent {
 }
 
 class QueryEngine {
+  // Global set to prevent duplicate tool executions across query sessions
+  private globalExecutedToolIds = new Map<string, Set<string>>();
+  
+  /**
+   * Clear executed tool tracking for a specific request or all requests
+   */
+  public clearExecutedTools(requestId?: string): void {
+    if (requestId) {
+      this.globalExecutedToolIds.delete(requestId);
+    } else {
+      this.globalExecutedToolIds.clear();
+    }
+  }
+  
+  private createToolCallErrorInfo(toolName: string, toolArguments: string, errorMessage: string, duration_ms: number) {
+    return {
+      name: toolName,
+      arguments: toolArguments,
+      result: errorMessage,
+      isError: true,
+      duration_ms
+    };
+  }
+  private createToolCallSuccessInfo(toolName: string, toolArguments: string, resultText: string, duration_ms: number, isError: boolean) {
+    return {
+      name: toolName,
+      arguments: toolArguments,
+      result: resultText,
+      isError: isError,
+      duration_ms
+    };
+  }
+
   private emitExecutionEvent(event: ExecutionEvent): string {
     return `<execution_event>${JSON.stringify(event)}</execution_event>`;
   }
 
-  private *processThinkingInContent(content: string, thinkingState: {id?: string, startTime?: number}): Generator<string> {
+  private processThinkingInContent(content: string, thinkingState: {id?: string, startTime?: number}): string[] {
+    const events: string[] = [];
+    
     if (content.includes('<think>') && !thinkingState.id) {
       thinkingState.id = `thinking-${Date.now()}`;
       thinkingState.startTime = Date.now();
-      yield this.emitExecutionEvent({type: 'thinking_start', id: thinkingState.id});
+      events.push(this.emitExecutionEvent({type: 'thinking_start', id: thinkingState.id}));
     }
     
     if (content.includes('</think>') && thinkingState.id && thinkingState.startTime) {
       const duration_ms = Date.now() - thinkingState.startTime;
-      yield this.emitExecutionEvent({type: 'thinking_complete', id: thinkingState.id, duration_ms});
+      events.push(this.emitExecutionEvent({type: 'thinking_complete', id: thinkingState.id, duration_ms}));
       thinkingState.id = undefined;
       thinkingState.startTime = undefined;
     }
-  }
-
-  /**
-   * Create a generator that processes the streaming response and executes tools on the fly
-   */
-  private async *createToolStreamingGenerator(
-    requestContext: RequestContext,
-    streamingResponse: AsyncGenerator<string>,
-    toolCalls: FunctionTool[],
-    memories: string,
-    cancellationToken: CancellationToken
-  ): AsyncGenerator<string> {
     
-    const detectedToolCalls: any[] = [];
-    let hasContent = false;
-    const thinkingState: {id?: string, startTime?: number} = {};
-    
-    try {
-      for await (const chunk of streamingResponse) {
-        if (cancellationToken.isCancelled) {
-          return;
-        }
-        
-        // Process thinking events
-        for (const thinkingEvent of this.processThinkingInContent(chunk, thinkingState)) {
-          yield thinkingEvent;
-        }
-        
-        // Check for tool call detection
-        if (chunk.includes('<tool_calls_detected>')) {
-          const match = chunk.match(/<tool_calls_detected>(.*?)<\/tool_calls_detected>/s);
-          if (match) {
-            try {
-              const newToolCalls = JSON.parse(match[1]);
-              detectedToolCalls.push(...newToolCalls);
-              
-              // Show "Executing..." status immediately using UPDATE format
-              const executingToolCalls = newToolCalls.map((toolCall: any) => ({
-                name: toolCall.function.name,
-                arguments: JSON.stringify(toolCall.function.arguments, null, 2),
-                result: 'Executing...',
-                isExecuting: true
-              }));
-              
-              // Use UPDATE format instead of replacing
-              yield `<tool_calls_update>${JSON.stringify(executingToolCalls)}</tool_calls_update>`;
-              
-            } catch (error) {
-              console.error('Failed to parse detected tool calls:', error);
-            }
-            // Don't yield the tool detection tags to the user
-            continue;
-          }
-        }
-        
-        // Check for tool call completion signal
-        if (chunk.includes('<tool_calls_complete>')) {
-          // Don't yield completion tags to user
-          continue;
-        }
-        
-        // Yield regular content
-        if (chunk.trim()) {
-          hasContent = true;
-          yield chunk;
-        }
-      }
-      
-      // After streaming content, execute tools if any were detected
-      if (detectedToolCalls.length > 0) {
-        const toolMessages: Message[] = [];
-        const capturedToolCalls: Array<{name: string, arguments: string, result: string, isError?: boolean}> = [];
-        
-        // Execute tools (like original approach)
-        for (const toolCall of detectedToolCalls) {
-          if (cancellationToken.isCancelled) {
-            break;
-          }
-          
-          const toolName = toolCall.function.name;
-          const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
-          const toolId = `tool-${toolName}-${Date.now()}`;
-          const toolStartTime = Date.now();
-          
-          yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
-          
-          TraceLogger.trace(requestContext, `tool-execution-start`, `Starting execution of tool: ${toolName}`);
-          
-          const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
-          
-          // Handle non-existent tools
-          if (!tool || tool.type !== "mcp") {
-            const errorMessage = `Tool '${toolName}' not found in available tools`;
-            TraceLogger.trace(requestContext, `tool-execution-error`, errorMessage);
-            
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            capturedToolCalls.push(toolCallInfo);
-            
-            // Add error message for AI context
-            toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`) });
-            
-            // Send completion event immediately for non-existent tool
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            
-            continue;
-          }
-          
-          try {
-            const toolResponse = await tool.mcpFunction(requestContext, toolCall);
-            TraceLogger.trace(requestContext, `tool-execution-success`, `Tool ${toolName} completed successfully`);
-            
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: '',
-              isError: false,
-              duration_ms
-            };
-            
-            if (toolResponse.isError) {
-              toolCallInfo.isError = true;
-              toolCallInfo.result = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
-              toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${toolCallInfo.result}`) });
-              TraceLogger.trace(requestContext, `tool-execution-error`, `Tool ${toolName} failed: ${toolCallInfo.result}`);
-            } else if (!toolResponse.content || toolResponse.content.length === 0) {
-              toolCallInfo.result = 'Tool executed successfully (no content returned)';
-              toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
-            } else {
-              let resultText = '';
-              for (const item of toolResponse.content) {
-                if (item.type === "text") {
-                  resultText += item.text as string;
-                } else {
-                  resultText += JSON.stringify(item);
-                }
-              }
-              toolCallInfo.result = resultText || 'Tool executed successfully';
-              toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
-            }
-            
-            capturedToolCalls.push(toolCallInfo);
-            
-            // Send completion event for successful tool
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: toolResponse.isError});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            
-          } catch (error: any) {
-            const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
-            TraceLogger.trace(requestContext, `tool-execution-error`, `Tool ${toolName} threw error: ${errorMessage}`);
-            
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            capturedToolCalls.push(toolCallInfo);
-            
-            // Send completion event for failed tool
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-          }
-        }
-        
-        // Generate final response with tool context (like original)
-        if (toolMessages.length > 0) {
-          const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
-          const toolCallsMetadata = `<tool_calls>${JSON.stringify(capturedToolCalls)}</tool_calls>`;
-          
-          const finalResponseStream = simpleChatOllamaStream(requestContext, chatSystemPrompt, memories, toolMessages);
-          
-          // Use original wrappedStreamWithToolCalls approach - sends final tool block
-          const wrappedStream = this.wrappedStreamWithToolCalls(finalResponseStream, cancellationToken, toolCallsMetadata);
-          
-          for await (const content of wrappedStream) {
-            if (cancellationToken.isCancelled) {
-              return;
-            }
-            yield content;
-          }
-          return;
-        }
-      }
-      
-      // Fallback if no content and no tools
-      if (!hasContent && detectedToolCalls.length === 0) {
-        TraceLogger.trace(requestContext, 'simpleChatOllamaStream', 'no content or tools, falling back to simple chat');
-        const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
-        const fallbackStream = simpleChatOllamaStream(requestContext, chatSystemPrompt, memories);
-        
-        for await (const content of fallbackStream) {
-          if (cancellationToken.isCancelled) {
-            return;
-          }
-          yield content;
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error in tool streaming generator:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      yield `\nError processing response: ${errorMessage}`;
-    }
+    return events;
   }
-  
-
 
   async processChatQuery(
     requestContext: RequestContext,
@@ -329,7 +148,7 @@ class QueryEngine {
       let conversationComplete = false;
       
       while (!conversationComplete && !cancellationToken.isCancelled) {
-        TraceLogger.trace(requestContext, 'single-conversation-round', `Starting conversation round with ${conversationMessages.length} messages`);
+        TraceLogger.trace(requestContext, 'conversation-round', `Starting conversation round with ${conversationMessages.length} messages`);
         
         // Get ollama client and constants
         const ollama = getOllamaClient();
@@ -359,7 +178,7 @@ class QueryEngine {
           if (errorMessage.includes('does not support tools')) {
             TraceLogger.trace(requestContext, 'model-tools-fallback', `Model ${MODELS.CHAT_MODEL} does not support tools, falling back to simple chat`);
             
-            // Fall back to simple chat without tools
+            // For models without tool calling, use simple chat
             const simpleChatStream = simpleChatOllamaStream(requestContext, systemPrompt, memories);
             
             // Stream the response directly from simple chat
@@ -378,179 +197,190 @@ class QueryEngine {
           }
         }
         
-        let assistantContent = '';
+        let chatContent = '';
         const detectedToolCalls: any[] = [];
         const thinkingState: {id?: string, startTime?: number} = {};
         
-        // Stream response and collect tool calls
+        // Track streaming tool call state
+        const activeStreamingTools = new Map<string, {
+          name: string;
+          arguments: string;
+          toolId: string;
+          isComplete: boolean;
+        }>();
+        // Use global executed tool tracking to prevent re-execution across query sessions
+        const requestId = requestContext.requestId;
+        if (!this.globalExecutedToolIds.has(requestId)) {
+          this.globalExecutedToolIds.set(requestId, new Set<string>());
+        }
+        const executedToolIds = this.globalExecutedToolIds.get(requestId)!;
+        
+        // Stream response and build tool calls incrementally
         for await (const part of response) {
           if (cancellationToken.isCancelled) {
             return;
           }
           
-          // Stream content immediately
+          // Log EVERY content chunk to see if tool calls appear in content
           if (part.message.content) {
-            // Process thinking events
-            for (const thinkingEvent of this.processThinkingInContent(part.message.content, thinkingState)) {
+            // Log every single character to see what we're missing
+            console.log('🔍 CONTENT:', JSON.stringify(part.message.content));
+            
+            // Process thinking events first
+            const thinkingEvents = this.processThinkingInContent(part.message.content, thinkingState);
+            for (const thinkingEvent of thinkingEvents) {
               yield thinkingEvent;
             }
             
-            assistantContent += part.message.content;
+            chatContent += part.message.content;
             yield part.message.content;
           }
           
-          // Collect tool calls
+          // Log when content is empty but tool_calls appear
+          if (!part.message.content && part.message.tool_calls) {
+            console.log('TOOL CALLS APPEARED WITH NO CONTENT! RAG');
+          }
+          
+          // Log when we get official tool calls
+          if (part.message.tool_calls) {
+            console.log('Official tool calls received - should match our streaming parsing');
+          }
+          
+          // IMMEDIATE tool execution when tool calls appear in stream
           if (part.message.tool_calls && part.message.tool_calls.length > 0) {
-            detectedToolCalls.push(...part.message.tool_calls);
+            console.log('COMPLETE tool calls received:', JSON.stringify(part.message.tool_calls, null, 2));
+            TraceLogger.trace(requestContext, 'streaming-tool-calls', `Tool calls received in stream: ${part.message.tool_calls.map(tc => tc.function.name).join(', ')}`);
             
-            // Emit position marker for inline rendering
-            yield `<tool_call_position id="tool-${detectedToolCalls.length - part.message.tool_calls.length}">`;
-            
-            // Send real-time tool update
-            const executingToolCalls = part.message.tool_calls.map(toolCall => ({
-              name: toolCall.function.name,
-              arguments: JSON.stringify(toolCall.function.arguments, null, 2),
-              result: 'Executing...',
-              isExecuting: true
-            }));
-            
-            yield `<tool_calls_update>${JSON.stringify(executingToolCalls)}</tool_calls_update>`;
+            // Process each tool call immediately
+            for (const toolCall of part.message.tool_calls) {
+              const toolName = toolCall.function.name;
+              const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+              const toolStartTime = Date.now();
+              
+              // Skip if already executed
+              const toolCallKey = `${toolName}-${JSON.stringify(toolCall.function.arguments)}`;
+              if (executedToolIds.has(toolCallKey)) {
+                continue;
+              }
+              executedToolIds.add(toolCallKey);
+              
+              // Find corresponding streaming tool to update its UI
+              const streamingKey = `streaming-${toolName}`;
+              const streamingTool = activeStreamingTools.get(streamingKey);
+              const displayToolId = streamingTool ? streamingTool.toolId : `tool-${toolCallKey.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+              
+              // Add to final tool calls for conversation
+              detectedToolCalls.push(toolCall);
+              
+              // If we didn't see this tool during streaming, show it now
+              if (!streamingTool) {
+                yield `<tool_call_position id="${displayToolId}">`;
+              }
+              
+              // Update tool to show execution status
+              yield `<tool_calls_update>${JSON.stringify([{
+                name: toolName,
+                arguments: toolArguments,
+                result: 'Executing...',
+                isExecuting: true
+              }])}</tool_calls_update>`;
+              
+              yield this.emitExecutionEvent({type: 'tool_start', id: displayToolId, name: toolName});
+              
+              // Find and execute tool immediately
+              const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
+              
+              if (!tool || tool.type !== "mcp") {
+                const errorMessage = `Tool '${toolName}' not found`;
+                
+                const duration_ms = Date.now() - toolStartTime;
+                const toolCallInfo = this.createToolCallErrorInfo(toolName, toolArguments, errorMessage, duration_ms);
+                
+                // Add error to conversation
+                conversationMessages.push({
+                  role: 'tool',
+                  content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
+                });
+                
+                yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: true});
+                yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+                continue;
+              }
+              
+              try {
+                // Execute tool immediately
+                const toolResponse = await tool.mcpFunction(requestContext, toolCall);
+                
+                let resultText = '';
+                if (toolResponse.isError) {
+                  resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
+                } else if (!toolResponse.content || toolResponse.content.length === 0) {
+                  resultText = 'Tool executed successfully (no content returned)';
+                } else {
+                  resultText = toolResponse.content.map(item => 
+                    item.type === "text" ? item.text as string : JSON.stringify(item)
+                  ).join('');
+                }
+                
+                // Add tool result to conversation for AI context
+                conversationMessages.push({
+                  role: 'tool',
+                  content: createQueryWithToolResponsePrompt(toolName, resultText)
+                });
+                
+                // Send completion immediately
+                const duration_ms = Date.now() - toolStartTime;
+                const toolCallInfo = this.createToolCallSuccessInfo(toolName, toolArguments, resultText, duration_ms, toolResponse.isError || false);
+                
+                yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: toolResponse.isError});
+                yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+                
+              } catch (error: any) {
+                const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
+                
+                // Add error to conversation
+                conversationMessages.push({
+                  role: 'tool',
+                  content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
+                });
+                
+                const duration_ms = Date.now() - toolStartTime;
+                const toolCallInfo = this.createToolCallErrorInfo(toolName, toolArguments, errorMessage, duration_ms);
+                
+                yield this.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms, isError: true});
+                yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+              }
+            }
           }
         }
         
         // Add assistant message to conversation
         conversationMessages.push({
           role: 'assistant',
-          content: assistantContent,
+          content: chatContent,
           tool_calls: detectedToolCalls.length > 0 ? detectedToolCalls : undefined
         });
         
-        // SAVE TO MEMORY AFTER EVERY RESPONSE
-        if (assistantContent.trim()) {
-          console.log('💾 Saving response to memory:', assistantContent.substring(0, 50) + '...');
+        // SAVE TO MEMORY AFTER EVERY RESPONSE (if enabled)
+        if (isMemoryEnabled() && chatContent.trim()) {
+          console.log('Saving response to memory:', chatContent.substring(0, 50) + '...');
           addToMemory([
             { role: 'user', content: requestContext.question },
-            { role: 'assistant', content: assistantContent }
+            { role: 'assistant', content: chatContent }
           ]).catch((error) => {
-            console.error('❌ Memory save failed:', error);
+            console.error('Memory save failed:', error);
           });
         }
 
         // Log what the AI said in this round
-        TraceLogger.trace(requestContext, 'single-conversation-assistant-content', `AI said: ${assistantContent}`);
-        TraceLogger.trace(requestContext, 'single-conversation-detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
+        TraceLogger.trace(requestContext, 'chat-content', `AI said: ${chatContent}`);
+        TraceLogger.trace(requestContext, 'detected-tools', `Detected ${detectedToolCalls.length} tool calls: ${detectedToolCalls.map(tc => tc.function.name).join(', ')}`);
         
         // If no tool calls, conversation is complete
         if (detectedToolCalls.length === 0) {
           conversationComplete = true;
           break;
         }
-        
-        // Execute tools and add results to conversation
-        for (const toolCall of detectedToolCalls) {
-          if (cancellationToken.isCancelled) {
-            break;
-          }
-          
-          const toolName = toolCall.function.name;
-          const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
-          const toolId = `tool-${toolName}-${Date.now()}`;
-          const toolStartTime = Date.now();
-          
-          yield this.emitExecutionEvent({type: 'tool_start', id: toolId, name: toolName});
-          
-          TraceLogger.trace(requestContext, 'single-conversation-tool-start', `Executing ${toolName}`);
-          TraceLogger.trace(requestContext, 'single-conversation-tool-args', `Tool arguments: ${toolArguments}`);
-          TraceLogger.trace(requestContext, 'single-conversation-mcp-request', `MCP Request: ${JSON.stringify(toolCall, null, 2)}`);
-          
-          const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
-          
-          if (!tool || tool.type !== "mcp") {
-            const errorMessage = `Tool '${toolName}' not found`;
-            
-            // Add error to conversation
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            continue;
-          }
-          
-          try {
-            const toolResponse = await tool.mcpFunction(requestContext, toolCall);
-            TraceLogger.trace(requestContext, 'single-conversation-tool-success', `Tool ${toolName} completed`);
-            TraceLogger.trace(requestContext, 'single-conversation-mcp-response', `MCP Response: ${JSON.stringify(toolResponse, null, 2)}`);
-            
-            let resultText = '';
-            if (toolResponse.isError) {
-              resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
-            } else if (!toolResponse.content || toolResponse.content.length === 0) {
-              resultText = 'Tool executed successfully (no content returned)';
-            } else {
-              resultText = toolResponse.content.map(item => 
-                item.type === "text" ? item.text as string : JSON.stringify(item)
-              ).join('');
-            }
-            
-            // Add tool result to conversation for AI context
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, resultText)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: resultText,
-              isError: toolResponse.isError,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: toolResponse.isError});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-            
-          } catch (error: any) {
-            const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
-            TraceLogger.trace(requestContext, 'single-conversation-tool-error', errorMessage);
-            
-            // Add error to conversation
-            conversationMessages.push({
-              role: 'tool',
-              content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`)
-            });
-            
-            // Send completion event
-            const duration_ms = Date.now() - toolStartTime;
-            const toolCallInfo = {
-              name: toolName,
-              arguments: toolArguments,
-              result: errorMessage,
-              isError: true,
-              duration_ms
-            };
-            
-            yield this.emitExecutionEvent({type: 'tool_complete', id: toolId, duration_ms, isError: true});
-            yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
-          }
-        }
-        
-        // Continue conversation with tool results
-        // The loop will start another round with the updated conversation
       }
       } catch (error) {
       console.error('Error in response generator:', error);
@@ -581,46 +411,6 @@ class QueryEngine {
     }
   }
 
-  /**
-   * Wrap a stream generator with cancellation check and tool calls metadata
-   */
-  private async *wrappedStreamWithToolCalls(
-    stream: AsyncGenerator<string>,
-    cancellationToken: CancellationToken,
-    toolCallsMetadata: string
-  ): AsyncGenerator<string> {
-    try {
-      let isFirstChunk = true;
-      for await (const chunk of stream) {
-        if (cancellationToken.isCancelled) {
-          TraceLogger.trace({ requestId: "cancelled", currentDatetime: new Date(), question: "", chatHistory: new ChatHistory() }, 
-            'stream_cancelled', 'User cancelled the request');
-          break;
-        }
-        
-        // Prepend tool calls metadata to the first chunk if we have tool calls
-        if (isFirstChunk && toolCallsMetadata) {
-          yield toolCallsMetadata + chunk;
-          isFirstChunk = false;
-        } else {
-          yield chunk;
-        }
-      }
-    } finally {
-      // Ensure we don't leave the token in cancelled state
-      cancellationToken.reset();
-    }
-  }
-
-  private async *emptyCancelledStream(cancellationToken: CancellationToken): AsyncGenerator<string> {
-    // We still need to reset the token
-    try {
-      yield "Operation cancelled";
-    } finally {
-      cancellationToken.reset();
-    }
-  }
-
   async query(
     requestContext: RequestContext,
     chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
@@ -641,35 +431,4 @@ class QueryEngine {
 
 const queryEngineInstance = new QueryEngine();
 
-// TODO: replace this with actual tests
-if (require.main === module) {
-  (async () => {
-    const chatMode = 'CONTEXT_AWARE';
-    const requestContext: RequestContext = {
-      currentDatetime: new Date(),
-      chatHistory: new ChatHistory(),
-      question: 'Why is the sky blue?',
-      requestId: "test-request-id",
-    };
-    const stream = await queryEngineInstance.query(requestContext, chatMode);
-    if (!stream) {
-      process.exit(1);
-    }
-    // eslint-disable-next-line no-restricted-syntax
-    let output = "";
-    let isFirstToken = true;
-    for await (const chunk of stream) {
-      if (isFirstToken) {
-        output += chunk;
-        isFirstToken = false;
-        TraceLogger.trace(requestContext, 'response_to_user_ttft', output);
-      } else {
-        output += chunk;
-      }
-    }
-    TraceLogger.trace(requestContext, 'response_to_user_complete', output);
-  })();
-}
-
 export { QueryEngine, queryEngineInstance };
-
