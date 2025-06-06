@@ -73,23 +73,22 @@ class ChatHistory {
   private cleanContentForAI(content: string): string {
     let cleaned = content;
     
-    // Remove ALL execution event tags
-    cleaned = cleaned.replace(/<execution_event[^>]*>.*?<\/execution_event>/gs, '');
+    // AGGRESSIVE CLEANING: Remove ALL XML-like tags that start with these patterns
+    cleaned = cleaned.replace(/<execution_event\b[^>]*>.*?<\/execution_event>/gs, '');
+    cleaned = cleaned.replace(/<tool_call_position\b[^>]*>/g, '');
+    cleaned = cleaned.replace(/<tool_calls_update\b[^>]*>.*?<\/tool_calls_update>/gs, '');
+    cleaned = cleaned.replace(/<tool_calls_complete\b[^>]*>.*?<\/tool_calls_complete>/gs, '');
+    cleaned = cleaned.replace(/<tool_calls\b[^>]*>.*?<\/tool_calls>/gs, '');
     
-    // Remove ALL tool call position markers
-    cleaned = cleaned.replace(/<tool_call_position[^>]*>/g, '');
+    // Remove standalone closing tags that might be left behind
+    cleaned = cleaned.replace(/<\/(?:execution_event|tool_calls_update|tool_calls_complete|tool_calls|tool_call_position)>/g, '');
     
-    // Remove ALL tool call update tags
-    cleaned = cleaned.replace(/<tool_calls_update[^>]*>.*?<\/tool_calls_update>/gs, '');
-    
-    // Remove ALL tool calls complete tags
-    cleaned = cleaned.replace(/<tool_calls_complete[^>]*>.*?<\/tool_calls_complete>/gs, '');
-    
-    // Remove ANY other XML tags that could leak execution metadata
-    cleaned = cleaned.replace(/<(?:tool_result|execution_state|metadata)[^>]*>.*?<\/(?:tool_result|execution_state|metadata)>/gs, '');
+    // Remove any remaining XML-like execution metadata
+    cleaned = cleaned.replace(/<[^>]*(?:execution|tool_call|metadata|event)[^>]*>.*?<\/[^>]+>/gs, '');
     
     // Clean up any excessive whitespace left behind
     cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+    cleaned = cleaned.replace(/^\s+|\s+$/gm, ''); // Trim each line
     cleaned = cleaned.trim();
     
     return cleaned;
