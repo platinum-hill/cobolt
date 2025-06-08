@@ -56,13 +56,42 @@ class ChatHistory {
 
   /**
    * Convert chat history to format used by Ollama LLM
-   * @returns Array of Message objects in Ollama format
+   * Removes execution event metadata from AI context
+   * @returns Array of Message objects in Ollama format with clean content
    */
   toOllamaMessages(): Message[] {
     return this.messages.map(message => ({
       role: message.role,
-      content: message.content
+      content: this.cleanContentForAI(message.content)
     }));
+  }
+
+  /**
+   * Clean content for AI context - removes ALL execution metadata
+   * This prevents AI from learning how to fake execution patterns
+   */
+  private cleanContentForAI(content: string): string {
+    let cleaned = content;
+    
+    // AGGRESSIVE CLEANING: Remove ALL XML-like tags that start with these patterns
+    cleaned = cleaned.replace(/<execution_event\b[^>]*>.*?<\/execution_event>/gs, '');
+    cleaned = cleaned.replace(/<tool_call_position\b[^>]*>/g, '');
+    cleaned = cleaned.replace(/<tool_calls_update\b[^>]*>.*?<\/tool_calls_update>/gs, '');
+    cleaned = cleaned.replace(/<tool_calls_complete\b[^>]*>.*?<\/tool_calls_complete>/gs, '');
+    cleaned = cleaned.replace(/<tool_calls\b[^>]*>.*?<\/tool_calls>/gs, '');
+    
+    // Remove standalone closing tags that might be left behind
+    cleaned = cleaned.replace(/<\/(?:execution_event|tool_calls_update|tool_calls_complete|tool_calls|tool_call_position)>/g, '');
+    
+    // Remove any remaining XML-like execution metadata
+    cleaned = cleaned.replace(/<[^>]*(?:execution|tool_call|metadata|event)[^>]*>.*?<\/[^>]+>/gs, '');
+    
+    // Clean up any excessive whitespace left behind
+    cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+    cleaned = cleaned.replace(/^\s+|\s+$/gm, ''); // Trim each line
+    cleaned = cleaned.trim();
+    
+    return cleaned;
   }
 
   /**

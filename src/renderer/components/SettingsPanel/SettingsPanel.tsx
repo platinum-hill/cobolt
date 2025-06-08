@@ -32,6 +32,7 @@ function SettingsPanel({
   const [isOpen, setIsOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [conductorEnabled, setConductorEnabled] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelResponse[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [isToolInfoOpen, setIsToolInfoOpen] = useState(false);
@@ -47,11 +48,27 @@ function SettingsPanel({
     fetchMemoryEnabled();
   }, []);
 
+  // Get initial conductor setting
+  useEffect(() => {
+    const fetchConductorEnabled = async () => {
+      const enabled = await window.api.getConductorEnabled();
+      setConductorEnabled(enabled);
+    };
+    fetchConductorEnabled();
+  }, []);
+
   // Handle memory toggle change
   const handleMemoryToggle = (event: ChangeEvent<HTMLInputElement>) => {
     const enabled = event.target.checked;
     setMemoryEnabled(enabled);
     window.api.setMemoryEnabled(enabled);
+  };
+
+  // Handle conductor toggle change
+  const handleConductorToggle = (event: ChangeEvent<HTMLInputElement>) => {
+    const enabled = event.target.checked;
+    setConductorEnabled(enabled);
+    window.api.setConductorEnabled(enabled);
   };
 
   // Function to fetch both available models and current models
@@ -412,6 +429,24 @@ function SettingsPanel({
                 onChange={handleMemoryToggle}
                 className="memory-toggle"
                 aria-labelledby="memory-toggle-label"
+              />
+            </div>
+          </div>
+          <div className="toggle-setting">
+            <div className="toggle-row">
+              {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+              <label id="conductor-toggle-label" htmlFor="conductor-toggle">
+                Enable Conductor Mode
+                <span className="info-icon" title="Phase-based AI responses with precise tool control">
+                  i
+                </span>
+              </label>
+              <Toggle
+                id="conductor-toggle"
+                checked={conductorEnabled}
+                onChange={handleConductorToggle}
+                className="conductor-toggle"
+                aria-labelledby="conductor-toggle-label"
               />
             </div>
           </div>

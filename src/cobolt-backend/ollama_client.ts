@@ -1,14 +1,9 @@
-import { Ollama, Message, ChatResponse } from 'ollama';
+import { Ollama, Message} from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
-import { FunctionTool } from './ollama_tools';
 import * as os from 'os';
 import configStore from './data_models/config_store';
-import { addToMemory } from './memory';
-import { RequestContext, TraceLogger } from './logger';
-import { formatDateTime } from './datetime_parser';
-import { createQueryWithToolsPrompt } from './prompt_templates';
-import  { ChatHistory } from './chat_history';
+
 import { MODELS } from './model_manager'
 import { BrowserWindow } from 'electron';
 
@@ -402,100 +397,7 @@ async function stopOllama() {
   }
 }
 
-/**
- * Given a prompt gets the user a query to ollama with the specified tools
- * @param messages - a slice of messages objects
- * @returns An generator object that yields the response from the LLM
- */
-async function* simpleChatOllamaStream(requestContext: RequestContext,
-  systemPrompt: string,
-  memories: string = '',
-  moreMessages: Message[] = []
-): AsyncGenerator<string> {
-  const messages: Message[] = [
-    { role: 'system', content: systemPrompt },
-  ]
-  
-  if (memories) {
-    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
-  }
-  
-  if (requestContext.chatHistory.length > 0) {
-    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
-      messages.push(message);
-    });
-  }
-  messages.push(...moreMessages);
-  messages.push({ role: 'user', content: requestContext.question });
-  TraceLogger.trace(requestContext, 'final_prompt', messages.map((message) => message.content).join('\n'));
-  const response = await ollama.chat({
-    model: MODELS.CHAT_MODEL,
-    messages: messages,
-    keep_alive: -1,
-    options: {
-      temperature: defaultTemperature,
-      top_k: defaultTopK,
-      top_p: defaultTopP,
-      num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
-    },
-    stream: true,
-  });
-  let fullResponse = '';
-  for await (const part of response) {
-    fullResponse += part.message.content;
-    yield part.message.content;
-  }
-  requestContext.chatHistory.addUserMessage(requestContext.question);
-  requestContext.chatHistory.addAssistantMessage(fullResponse);
 
-  // This operation runs in the background
-  log.info('Sending data to add to memory: ', requestContext.question, fullResponse);
-  // TODO: Can we send the tool calls results to memory?
-  addToMemory([
-    { role: 'user', content: requestContext.question },
-    { role: 'assistant', content: fullResponse }
-  ]).catch((error) => {
-    log.error('Error adding to memory:', error);
-  });
-}
-
-/**
- * Send a simple query to ollama with the specified tools.
- * @param messages - a slice of messages objects
- * @param toolCalls - the list of FunctionTools to pass with the query
- * @returns - The response from the LLM
- */
-async function queryOllamaWithTools(requestContext: RequestContext,
-  systemPrompt: string,
-  toolCalls: FunctionTool[],
-  memories: string = ''): Promise<ChatResponse> {
-  const messages: Message[] = [
-    { role: 'system', content: systemPrompt },
-  ]
-  
-  if (memories) {
-    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
-  }
-  
-  if (requestContext.chatHistory.length > 0) {
-    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
-      messages.push(message);
-    });
-  }
-  messages.push({ role: 'user', content: requestContext.question });
-  return ollama.chat({
-    model: MODELS.TOOLS_MODEL,
-    keep_alive: -1,
-    messages: messages,
-    tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-    options: {
-      temperature: defaultTemperature,
-      top_k: defaultTopK,
-      top_p: defaultTopP,
-      num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
-    },
-  });
-}
 
 const getOllamaClient = (): Ollama => {
   return ollama
@@ -515,27 +417,4 @@ function logExecOutput(platform: string) {
   };
 }
 
-if (require.main === module) {
-  (async () => {
-    await initOllama();
-    const toolCalls: FunctionTool[] = [];
-    const requestContext = {
-      requestId: '123',
-      currentDatetime: new Date(),
-      question: 'Give me all of my calender events since last week from friends',
-      chatHistory: new ChatHistory(),
-    };
-    const toolUserMessage = createQueryWithToolsPrompt(formatDateTime(new Date()).toString())
-    const response = await queryOllamaWithTools(requestContext, toolUserMessage, toolCalls);
-    console.log(response)
-    if (!response.message.tool_calls) {
-      console.log('No tool calls');
-      return;
-    }
-    for (const toolCall of response.message.tool_calls) {
-      console.log('Tool call:', toolCall);
-    }
-  })();
-}
-
-export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
+export { initOllama, getOllamaClient, stopOllama, setProgressWindow };
