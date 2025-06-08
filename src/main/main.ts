@@ -390,6 +390,17 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
       await persistentChatHistory.updateChatTitle(chatId, newTitle);
     }
 
+    // Load the chat history for this specific chat
+    chatHistory.clear();
+    const messages = await persistentChatHistory.getMessagesForChat(chatId);
+    messages.forEach((msg: any) => {
+      if (msg.role === 'user') {
+        chatHistory.addUserMessage(msg.content);
+      } else if (msg.role === 'assistant') {
+        chatHistory.addAssistantMessage(msg.content);
+      }
+    });
+
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory,
