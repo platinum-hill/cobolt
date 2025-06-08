@@ -128,4 +128,8 @@ if (require.main === module) {
   }
 }
 
-export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled };
+function isMemoryEnabled(): boolean {
+  return memoryEnabled;
+}
+
+export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled, isMemoryEnabled };
