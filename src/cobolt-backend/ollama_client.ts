@@ -1,10 +1,14 @@
-import { Ollama, Message} from 'ollama';
+import { Ollama, Message, ChatResponse } from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
+import { FunctionTool } from './ollama_tools';
 import * as os from 'os';
 import configStore from './data_models/config_store';
 import { addToMemory } from './memory';
 import { RequestContext, TraceLogger } from './logger';
+import { formatDateTime } from './datetime_parser';
+import { createQueryWithToolsPrompt } from './prompt_templates';
+import  { ChatHistory } from './chat_history';
 import { MODELS } from './model_manager'
 import { BrowserWindow } from 'electron';
 
@@ -455,6 +459,44 @@ async function* simpleChatOllamaStream(requestContext: RequestContext,
   });
 }
 
+/**
+ * Send a simple query to ollama with the specified tools.
+ * @param messages - a slice of messages objects
+ * @param toolCalls - the list of FunctionTools to pass with the query
+ * @returns - The response from the LLM
+ */
+async function queryOllamaWithTools(requestContext: RequestContext,
+  systemPrompt: string,
+  toolCalls: FunctionTool[],
+  memories: string = ''): Promise<ChatResponse> {
+  const messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+  ]
+  
+  if (memories) {
+    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
+  }
+  
+  if (requestContext.chatHistory.length > 0) {
+    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
+      messages.push(message);
+    });
+  }
+  messages.push({ role: 'user', content: requestContext.question });
+  return ollama.chat({
+    model: MODELS.TOOLS_MODEL,
+    keep_alive: -1,
+    messages: messages,
+    tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
+    options: {
+      temperature: defaultTemperature,
+      top_k: defaultTopK,
+      top_p: defaultTopP,
+      num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
+    },
+  });
+}
+
 const getOllamaClient = (): Ollama => {
   return ollama
 }
@@ -473,4 +515,27 @@ function logExecOutput(platform: string) {
   };
 }
 
-export { initOllama, getOllamaClient, simpleChatOllamaStream, stopOllama, setProgressWindow };
+if (require.main === module) {
+  (async () => {
+    await initOllama();
+    const toolCalls: FunctionTool[] = [];
+    const requestContext = {
+      requestId: '123',
+      currentDatetime: new Date(),
+      question: 'Give me all of my calender events since last week from friends',
+      chatHistory: new ChatHistory(),
+    };
+    const toolUserMessage = createQueryWithToolsPrompt(formatDateTime(new Date()).toString())
+    const response = await queryOllamaWithTools(requestContext, toolUserMessage, toolCalls);
+    console.log(response)
+    if (!response.message.tool_calls) {
+      console.log('No tool calls');
+      return;
+    }
+    for (const toolCall of response.message.tool_calls) {
+      console.log('Tool call:', toolCall);
+    }
+  })();
+}
+
+export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
