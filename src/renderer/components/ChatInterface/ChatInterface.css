@@ -458,24 +458,6 @@
   background: #7CA97E;
 } 
 
-/* Thinking content scrollbar styling */
-.thinking-content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.thinking-content::-webkit-scrollbar-track {
-  background: #1E2329;
-}
-
-.thinking-content::-webkit-scrollbar-thumb {
-  background: #2A2F35;
-  border-radius: 3px;
-}
-
-.thinking-content::-webkit-scrollbar-thumb:hover {
-  background: #7CA97E;
-}
-
 .assistant-message-content {
   position: relative;
   padding-bottom: 24px; /* give space for button */
@@ -770,13 +752,6 @@
   outline-offset: 2px;
 }
 
-/* Remove Tool call buttons */
-.individual-tool-call button:focus,
-.individual-tool-call button:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
 .thinking-header:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(124, 169, 126, 0.1);
@@ -786,23 +761,11 @@
 .thinking-header .header-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
   position: relative;
   z-index: 1;
 }
-.thinking-header .header-text {
-  display: flex;
-  align-items: center;
-}
 
-.thinking-header .header-badges {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.thinking-header .header-text::before {
+.thinking-header .header-content::before {
   content: '▼';
   margin-right: 0.5rem;
   font-size: 0.7em;
@@ -810,7 +773,7 @@
   opacity: 0.7;
 }
 
-.thinking-header.collapsed .header-text::before {
+.thinking-header.collapsed .header-content::before {
   transform: rotate(-90deg);
 }
 
@@ -870,38 +833,6 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-.executing-badge {
-  background-color: rgba(255, 193, 7, 0.2);
-  color: #ffc107;
-  padding: 0.1rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.7em;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  animation: pulse 2s infinite;
-}
-.time-badge {
-  background-color: rgba(76, 175, 80, 0.2);
-  color: #4caf50;
-  padding: 0.1rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.7em;
-  font-weight: 500;
-  letter-spacing: 0.5px;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-  100% {
-    opacity: 1;
-  }
 }
 
 .tool-call-args,
