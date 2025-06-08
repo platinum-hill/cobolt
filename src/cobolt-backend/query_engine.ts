@@ -122,14 +122,14 @@ class QueryEngine {
 
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
+    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONDUCTOR' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
     
-    if (chatMode === 'CONTEXT_AWARE') {
+    if (chatMode === 'CONTEXT_AWARE' || chatMode === 'CONDUCTOR') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
       return this.processRagRatQuery(requestContext, toolCalls, cancellationToken);
     }

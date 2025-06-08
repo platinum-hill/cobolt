@@ -203,8 +203,8 @@ export class ConductorGenerator {
           num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
-        signal: abortController.signal  // ← Add abort signal
-      });
+        signal: abortController.signal  // Add abort signal
+      } as any);
       
       // Phase 1: Stream and detect stop conditions
       for await (const part of response) {
@@ -240,7 +240,7 @@ export class ConductorGenerator {
       }
       
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if ((error as any).name === 'AbortError') {
         console.log(`[Conductor] AI generation cancelled successfully: ${stopReason}`);
       } else {
         console.error('[Conductor] Unexpected error during streaming:', error);
@@ -303,8 +303,8 @@ export class ConductorGenerator {
           num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
-        signal: abortController.signal  // ← Add abort signal
-      });
+        signal: abortController.signal  // Add abort signal
+      } as any);
       
       for await (const part of response) {
         // Check for user cancellation
@@ -329,7 +329,7 @@ export class ConductorGenerator {
       }
       
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if ((error as any).name === 'AbortError') {
         console.log('[Conductor] AI generation cancelled successfully (natural end)');
       } else {
         console.error('[Conductor] Unexpected error during streaming:', error);
@@ -386,8 +386,8 @@ export class ConductorGenerator {
           num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
-        signal: abortController.signal  // ← Add abort signal
-      });
+        signal: abortController.signal  // Add abort signal
+      } as any);
       
       for await (const part of response) {
         // Check for user cancellation first
@@ -417,7 +417,7 @@ export class ConductorGenerator {
       }
       
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if ((error as any).name === 'AbortError') {
         console.log(`[Conductor] AI generation cancelled successfully: ${stopReason}`);
       } else {
         console.error('[Conductor] Unexpected error during streaming:', error);

@@ -95,8 +95,8 @@ export class SequentialGenerator {
               num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
             },
             stream: true,
-            signal: abortController.signal  // ← Add abort signal
-          });
+            signal: abortController.signal  // Add abort signal
+          } as any);
         } catch (error: any) {
           // Check if the error is due to cancellation first
           if (error.name === 'AbortError') {
