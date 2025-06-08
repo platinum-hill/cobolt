@@ -1,9 +1,11 @@
 import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
 import { simpleChatOllamaStream } from './simple_ollama_stream';
-import { createChatPrompt } from './prompt_templates';
+import { queryOllamaWithTools } from './ollama_client';
+import { createChatPrompt, createQueryWithToolsPrompt, createQueryWithToolResponsePrompt } from './prompt_templates';
 import { searchMemories } from './memory';
 import { FunctionTool } from './ollama_tools';
+import { Message } from 'ollama';
 import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 import { ConductorGenerator } from './generators/conductor_generator';
@@ -83,19 +85,146 @@ class QueryEngine {
       return this.processConductorQuery(requestContext, toolCalls, cancellationToken);
     }
     
-    // Regular RAG flow
+    // Use original team's two-phase architecture (restored)
+    return this.processOriginalRagRatQuery(requestContext, toolCalls, cancellationToken);
+  }
+
+  /**
+   * V1 RAT | RAG query pipeline - Restored original team architecture 
+   * Phase 1: Use TOOLS_MODEL to determine which tools to call
+   * Phase 2: Execute tools and stream final response with CHAT_MODEL
+   */
+  async processOriginalRagRatQuery(
+    requestContext: RequestContext,
+    toolCalls: FunctionTool[],
+    cancellationToken: CancellationToken = globalCancellationToken
+  ): Promise<AsyncGenerator<string>> {
+    // Perform initial query with tool descriptions using dedicated TOOLS_MODEL
     const memories = await searchMemories(requestContext.question);
-    TraceLogger.trace(requestContext, 'chat_relevant_memories', memories);
+    if (cancellationToken.isCancelled) {
+      return this.emptyCancelledStream();
+    }
+    TraceLogger.trace(requestContext, 'processRagRatQuery-question', requestContext.question);
+    TraceLogger.trace(requestContext, 'processRagRatQuery-memories_retrieved', memories);
     
-    // Use chat prompt (not tool planning prompt)
+    // Phase 1: Use TOOLS_MODEL with specialized prompt for tool selection
+    const toolUseSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString());
+    const response = await queryOllamaWithTools(requestContext, toolUseSystemPrompt, toolCalls, memories);
+    if (cancellationToken.isCancelled) {
+      return this.emptyCancelledStream();
+    }
+    
+    // If there are no tool calls, return a simple chat response
+    if (!response.message.tool_calls) {
+      TraceLogger.trace(requestContext, 'processRagRatQuery', 'no tool calls requested');
+      const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
+      return this.wrappedStream(
+        simpleChatOllamaStream(requestContext, chatSystemPrompt, memories),
+        cancellationToken
+      );
+    }
+    
+    const toolMessages: Message[] = [];
+    const capturedToolCalls: Array<{name: string, arguments: string, result: string, isError?: boolean, duration_ms?: number}> = [];
+
+    // Handle tool calls with improved error handling and metadata
+    for (const toolCall of response.message.tool_calls) {
+      if (cancellationToken.isCancelled) {
+        TraceLogger.trace(requestContext, 'tool_execution_cancelled', 
+          'Tool execution cancelled by user request');
+        break;
+      }
+      
+      const toolName = toolCall.function.name;
+      const toolArguments = JSON.stringify(toolCall.function.arguments, null, 2);
+      const toolStartTime = Date.now();
+      const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
+      
+      if (!tool) {
+        continue;
+      }
+
+      if (tool.type === "mcp") {
+        try {
+          const toolResponse = await tool.mcpFunction(requestContext, toolCall);
+          const duration_ms = Date.now() - toolStartTime;
+
+          const toolCallInfo = {
+            name: toolName,
+            arguments: toolArguments,
+            result: '',
+            isError: false,
+            duration_ms
+          };
+
+          if (toolResponse.isError) {
+            toolCallInfo.isError = true;
+            toolCallInfo.result = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
+            toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${toolCallInfo.result}`) });
+            capturedToolCalls.push(toolCallInfo);
+            TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call failed`);
+          } else if (!toolResponse.content || toolResponse.content.length === 0) {
+            toolCallInfo.result = 'Tool executed successfully (no content returned)';
+            toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
+            capturedToolCalls.push(toolCallInfo);
+            TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call completed with no content`);
+          } else {
+            let resultText = '';
+            for (const item of toolResponse.content) {
+              if (item.type === "text") {
+                resultText += item.text as string;
+              } else {
+                resultText += JSON.stringify(item);
+              }
+            }
+            
+            toolCallInfo.result = resultText || 'Tool executed successfully';
+            toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, toolCallInfo.result) });
+            capturedToolCalls.push(toolCallInfo);
+            TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call completed successfully`);
+          }
+        } catch (error: any) {
+          const duration_ms = Date.now() - toolStartTime;
+          const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
+          
+          const toolCallInfo = {
+            name: toolName,
+            arguments: toolArguments,
+            result: errorMessage,
+            isError: true,
+            duration_ms
+          };
+          
+          toolMessages.push({ role: 'tool', content: createQueryWithToolResponsePrompt(toolName, `Error: ${errorMessage}`) });
+          capturedToolCalls.push(toolCallInfo);
+          TraceLogger.trace(requestContext, `processRagRatQuery-${toolName}`, `tool call failed with exception`);
+        }
+      }
+    }
+
+    // If no tool messages were generated, fall back to simple chat
+    if (toolMessages.length === 0) {
+      TraceLogger.trace(requestContext, 'processRagRatQuery', 'no tool messages generated (unexpected)');
+      const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
+      const toolCallsMetadata = capturedToolCalls.length > 0 ? 
+        `<tool_calls>${JSON.stringify(capturedToolCalls)}</tool_calls>` : '';
+      return this.wrappedStreamWithToolCalls(
+        simpleChatOllamaStream(requestContext, chatSystemPrompt, memories),
+        cancellationToken,
+        toolCallsMetadata
+      );
+    }
+
+    // Phase 2: Create final response using CHAT_MODEL with tool results
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
-    return this.sequentialGenerator.createSequentialResponseGenerator(
-      requestContext, 
-      chatSystemPrompt,
-      toolCalls, 
-      memories, 
-      cancellationToken
+    const toolCallsMetadata = capturedToolCalls.length > 0 ? 
+      `<tool_calls>${JSON.stringify(capturedToolCalls)}</tool_calls>` : '';
+    
+    return this.wrappedStreamWithToolCalls(
+      simpleChatOllamaStream(requestContext, chatSystemPrompt, memories, toolMessages),
+      cancellationToken,
+      toolCallsMetadata
     );
   }
 
@@ -117,6 +246,42 @@ class QueryEngine {
       console.error('Error in wrapped stream:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       yield `\nError in stream: ${errorMessage}`;
+    }
+  }
+  /**
+   * Wrap a stream generator with cancellation check and tool calls metadata
+   */
+  private async *wrappedStreamWithToolCalls(
+    stream: AsyncGenerator<string>,
+    cancellationToken: CancellationToken,
+    toolCallsMetadata: string
+  ): AsyncGenerator<string> {
+    try {
+      let isFirstChunk = true;
+      for await (const chunk of stream) {
+        if (cancellationToken.isCancelled) {
+          return;
+        }
+        
+        if (isFirstChunk && toolCallsMetadata) {
+          yield toolCallsMetadata + chunk;
+          isFirstChunk = false;
+        } else {
+          yield chunk;
+        }
+      }
+    } catch (error) {
+      console.error('Error in wrapped stream with tool calls:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      yield `\nError in stream: ${errorMessage}`;
+    }
+  }
+
+  private async *emptyCancelledStream(): AsyncGenerator<string> {
+    try {
+      yield "Operation cancelled";
+    } finally {
+      // Reset is handled by the wrapping functions
     }
   }
 

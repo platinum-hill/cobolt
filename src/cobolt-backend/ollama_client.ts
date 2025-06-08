@@ -1,8 +1,11 @@
-import { Ollama } from 'ollama';
+import { Ollama, Message, ChatResponse } from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
 import * as os from 'os';
 import configStore from './data_models/config_store';
+import { RequestContext } from './logger';
+import { MODELS } from './model_manager';
+import { FunctionTool } from './ollama_tools';
 import { BrowserWindow } from 'electron';
 
 let progressWindow: BrowserWindow | null = null;
@@ -394,6 +397,55 @@ async function stopOllama() {
 
 
 
+const defaultTemperature = 1.0;
+const defaultTopK = 64;
+const defaultTopP = 0.95;
+
+/**
+ * Send a simple query to ollama with the specified tools.
+ * Uses the dedicated TOOLS_MODEL for efficient tool calling.
+ * @param requestContext - Request context with user query
+ * @param systemPrompt - System prompt for tool selection
+ * @param toolCalls - List of available tools
+ * @param memories - User memories for context
+ * @returns The response from the LLM with tool calls
+ */
+async function queryOllamaWithTools(
+  requestContext: RequestContext,
+  systemPrompt: string,
+  toolCalls: FunctionTool[],
+  memories: string = ''
+): Promise<ChatResponse> {
+  const messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+  ];
+  
+  if (memories) {
+    messages.push({ role: 'tool', content: 'User Memories: ' + memories });
+  }
+  
+  if (requestContext.chatHistory.length > 0) {
+    requestContext.chatHistory.toOllamaMessages().forEach((message) => {
+      messages.push(message);
+    });
+  }
+  
+  messages.push({ role: 'user', content: requestContext.question });
+  
+  return ollama.chat({
+    model: MODELS.TOOLS_MODEL,
+    keep_alive: -1,
+    messages: messages,
+    tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
+    options: {
+      temperature: defaultTemperature,
+      top_k: defaultTopK,
+      top_p: defaultTopP,
+      num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
+    },
+  });
+}
+
 const getOllamaClient = (): Ollama => {
   return ollama
 }
@@ -412,4 +464,4 @@ function logExecOutput(platform: string) {
   };
 }
 
-export { initOllama, getOllamaClient, stopOllama, setProgressWindow };
+export { initOllama, getOllamaClient, queryOllamaWithTools, stopOllama, setProgressWindow };
