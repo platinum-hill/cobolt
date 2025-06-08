@@ -15,6 +15,8 @@ beforeEach(() => {
       clearChat: jest.fn().mockResolvedValue(undefined),
       getMemoryEnabled: jest.fn().mockResolvedValue(false),
       setMemoryEnabled: jest.fn().mockResolvedValue(true),
+	  getConductorEnabled: jest.fn().mockResolvedValue(true),  // cheaterrr
+      setConductorEnabled: jest.fn().mockResolvedValue(true),
       onErrorDialog: jest.fn(),
       removeErrorDialogListener: jest.fn(),
       getRecentChats: jest.fn().mockResolvedValue([]),

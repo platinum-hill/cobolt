@@ -7,7 +7,7 @@ import { addToMemory, isMemoryEnabled } from '../memory';
 import { FunctionTool } from '../ollama_tools';
 import { Message } from 'ollama';
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
-import { ExecutionEvent, ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
+import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 
 type StreamingToolInfo = {
   name: string;
@@ -130,7 +130,7 @@ export class SequentialGenerator {
         }
         
         let chatContent = '';
-        let detectedToolCalls: any[] = [];
+        const detectedToolCalls: any[] = [];
         
         // Thinking state tracking
         const thinkingState: ThinkingState = { 

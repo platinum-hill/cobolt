@@ -1,10 +1,8 @@
-import { Ollama, Message} from 'ollama';
+import { Ollama } from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
 import * as os from 'os';
 import configStore from './data_models/config_store';
-
-import { MODELS } from './model_manager'
 import { BrowserWindow } from 'electron';
 
 let progressWindow: BrowserWindow | null = null;
@@ -70,9 +68,6 @@ const ollama = new Ollama({
 
 const OLLAMA_START_TIMEOUT = configStore.getOllamaStartTimeout();
 
-const defaultTemperature = 1.0;
-const defaultTopK = 64;
-const defaultTopP = 0.95;
 let ollamaServerStartedByApp = false;
 
 /**

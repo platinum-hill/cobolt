@@ -1,10 +1,10 @@
-import { RequestContext, TraceLogger } from '../logger';
+import { RequestContext } from '../logger';
 import { getOllamaClient } from '../ollama_client';
 import { MODELS } from '../model_manager';
 import { FunctionTool } from '../ollama_tools';
 import { Message } from 'ollama';
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
-import { ExecutionEvent, ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
+import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 
 export class ConductorGenerator {
   
@@ -176,7 +176,7 @@ export class ConductorGenerator {
     cancellationToken.setAbortController(abortController);
     
     let content = '';
-    let toolCallsFound: any[] = [];
+    const toolCallsFound: any[] = [];
     let shouldStop = false;
     let stopReason = '';
     
@@ -278,7 +278,7 @@ export class ConductorGenerator {
     cancellationToken.setAbortController(abortController);
     
     let content = '';
-    let toolCallsFound: any[] = [];
+    const toolCallsFound: any[] = [];
     
     const thinkingState: ThinkingState = { 
       isInThinkingBlock: false, 
@@ -359,7 +359,7 @@ export class ConductorGenerator {
     cancellationToken.setAbortController(abortController);
     
     let content = '';
-    let toolCallsFound: any[] = [];
+    const toolCallsFound: any[] = [];
     let shouldStop = false;
     let stopReason = '';
     

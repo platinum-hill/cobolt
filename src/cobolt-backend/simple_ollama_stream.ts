@@ -1,4 +1,4 @@
-import { Ollama, Message } from 'ollama';
+import { Message } from 'ollama';
 import log from 'electron-log/main';
 import { addToMemory } from './memory';
 import { RequestContext, TraceLogger } from './logger';

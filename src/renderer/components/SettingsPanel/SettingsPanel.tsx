@@ -437,7 +437,10 @@ function SettingsPanel({
               {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label id="conductor-toggle-label" htmlFor="conductor-toggle">
                 Enable Conductor Mode
-                <span className="info-icon" title="Phase-based AI responses with precise tool control">
+                <span
+                  className="info-icon"
+                  title="Phase-based AI responses with precise tool control"
+                >
                   i
                 </span>
               </label>
