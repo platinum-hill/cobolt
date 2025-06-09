@@ -219,9 +219,6 @@ export class ConductorGenerator {
         tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
         keep_alive: -1,
         options: {
-          temperature: 1.0,
-          top_k: 64,
-          top_p: 0.95,
           num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
@@ -319,9 +316,6 @@ export class ConductorGenerator {
         tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
         keep_alive: -1,
         options: {
-          temperature: 1.0,
-          top_k: 64,
-          top_p: 0.95,
           num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
@@ -402,9 +396,6 @@ export class ConductorGenerator {
         tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
         keep_alive: -1,
         options: {
-          temperature: 1.0,
-          top_k: 64,
-          top_p: 0.95,
           num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
@@ -586,6 +577,4 @@ export class ConductorGenerator {
       return { content: errorMessage, isError: true };
     }
   }
-
-
 }
