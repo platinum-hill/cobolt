@@ -38,8 +38,7 @@ declare global {
       listTools: () => Promise<ToolInfo[]>;
       getMemoryEnabled: () => Promise<boolean>;
       setMemoryEnabled: (enabled: boolean) => Promise<boolean>;
-      getConductorEnabled: () => Promise<boolean>;
-      setConductorEnabled: (enabled: boolean) => Promise<boolean>;
+
       openMcpServersFile: () => Promise<{ success: boolean; message: string }>;
 
       // Error dialog related methods

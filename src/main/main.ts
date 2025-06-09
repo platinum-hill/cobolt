@@ -462,16 +462,6 @@ ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
   return true;
 });
 
-ipcMain.handle('get-conductor-enabled', () => {
-  return appMetadata.getConductorEnabled();
-});
-
-ipcMain.handle('set-conductor-enabled', (_, enabled: boolean) => {
-  appMetadata.setConductorEnabled(enabled);
-  log.info('Conductor mode enabled set to: ', enabled);
-  return true;
-});
-
 ipcMain.handle('get-available-models', async () => {
   try {
     if (initializationComplete) {

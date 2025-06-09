@@ -7,54 +7,12 @@ import { FunctionTool } from './ollama_tools';
 import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 import { ConductorGenerator } from './generators/conductor_generator';
-import { SequentialGenerator } from './generators/sequential_generator';
 
 class QueryEngine {
   private conductorGenerator: ConductorGenerator;
-  private sequentialGenerator: SequentialGenerator;
   
   constructor() {
     this.conductorGenerator = new ConductorGenerator();
-    this.sequentialGenerator = new SequentialGenerator();
-  }
-  
-  /**
-   * Clear executed tool tracking for a specific request or all requests
-   */
-  public clearExecutedTools(requestId?: string): void {
-    this.sequentialGenerator.clearExecutedTools(requestId);
-  }
-
-  /**
-   * Check if conductor mode is enabled
-   */
-  private async isConductorModeEnabled(): Promise<boolean> {
-    // Import here to avoid circular dependency
-    const { default: appMetadata } = await import('./data_models/app_metadata');
-    return appMetadata.getConductorEnabled();
-  }
-
-  async processConductorQuery(
-    requestContext: RequestContext,
-    toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken = globalCancellationToken
-  ): Promise<AsyncGenerator<string>> {
-    // Get RAG memories
-    const memories = await searchMemories(requestContext.question);
-    TraceLogger.trace(requestContext, 'conductor_relevant_memories', memories);
-    
-    // Use chat prompt
-    const toolSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString())
-    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
-    
-    return this.conductorGenerator.createConductorResponseGenerator(
-      requestContext, 
-      chatSystemPrompt,
-      toolSystemPrompt,
-      toolCalls, 
-      memories, 
-      cancellationToken
-    );
   }
 
   async processChatQuery(
@@ -72,33 +30,25 @@ class QueryEngine {
     );
   }
 
-  async processRagRatQuery(
+  async processToolsQuery(
     requestContext: RequestContext,
     toolCalls: FunctionTool[],
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
-    // Check if conductor mode is enabled
-    const conductorEnabled = await this.isConductorModeEnabled();
-    
-    if (conductorEnabled) {
-      // Use conductor flow instead of regular RAG
-      return this.processConductorQuery(requestContext, toolCalls, cancellationToken);
-    }
-    
-    // Regular RAG flow
+    // Get RAG memories
     const memories = await searchMemories(requestContext.question);
-    TraceLogger.trace(requestContext, 'chat_relevant_memories', memories);
+    TraceLogger.trace(requestContext, 'conductor_relevant_memories', memories);
     
-    // Use tool prompt
-    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
+    // Use conductor generator with tools
     const toolSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString())
+    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
-    return this.sequentialGenerator.createSequentialResponseGenerator(
+    return this.conductorGenerator.createConductorResponseGenerator(
       requestContext, 
       chatSystemPrompt,
       toolSystemPrompt,
-      toolCalls,
-      memories,
+      toolCalls, 
+      memories, 
       cancellationToken
     );
   }
@@ -126,16 +76,16 @@ class QueryEngine {
 
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONDUCTOR' = 'CHAT',
+    chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
     
-    if (chatMode === 'CONTEXT_AWARE' || chatMode === 'CONDUCTOR') {
+    if (chatMode === 'CONTEXT_AWARE') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processRagRatQuery(requestContext, toolCalls, cancellationToken);
+      return this.processToolsQuery(requestContext, toolCalls, cancellationToken);
     }
 
     return this.processChatQuery(requestContext, cancellationToken);

@@ -10,7 +10,7 @@ async function main() {
     });
   
     console.log("Chat with AI (type 'exit' to quit)");
-    console.log("Available modes: chat, contextaware, conductor");
+    console.log("Available modes: chat, contextaware");
     console.log("Usage: /mode <mode> to switch modes (e.g. /mode contextaware)");
   
     const askQuestion = (): Promise<string> => {
@@ -21,7 +21,7 @@ async function main() {
       });
     };
 
-    let currentMode: 'CHAT' | 'CONTEXT_AWARE' | 'CONDUCTOR' = 'CONDUCTOR';
+    let currentMode: 'CHAT' | 'CONTEXT_AWARE' = 'CONTEXT_AWARE';
     const chatHistory = new ChatHistory();
   
     try {
@@ -36,12 +36,12 @@ async function main() {
 
         if (userInput.startsWith('/mode ')) {
           const mode = userInput.slice(6).toUpperCase();
-          if (['CHAT', 'CONTEXT_AWARE', 'CONDUCTOR'].includes(mode)) {
-            currentMode = mode as 'CHAT' | 'CONTEXT_AWARE' | 'CONDUCTOR';
+          if (['CHAT', 'CONTEXT_AWARE'].includes(mode)) {
+            currentMode = mode as 'CHAT' | 'CONTEXT_AWARE';
             console.log(`Switched to ${currentMode} mode`);
             continue;
           } else {
-            console.log("Invalid mode. Available modes: chat, contextaware, conductor");
+            console.log("Invalid mode. Available modes: chat, contextaware");
             continue;
           }
         }
