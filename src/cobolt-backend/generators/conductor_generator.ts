@@ -168,9 +168,9 @@ export class ConductorGenerator {
    */
   private async ragRetrieve(phaseKey: string): Promise<string> {
     const phasePrompts = {
-      "phase_1_thinking":   "\nYou MUST think through this query before responding.\n",
+      "phase_1_thinking":   "\nGive your thoughts on the user's query before responding.\n",
       "phase_1_response":   "\nSpeak to the user.\n", 
-      "phase_2_decision":   "\nYou must now choose: call a single tool OR end the conversation turn with a brief message.\n",
+      "phase_2_decision":   "\nIf the user's query could be enhanced by using one of your functions, then use a single tool OR end the conversation turn with a brief message.\n",
       "phase_3_reflection": "\nProvide thoughts about the tool call results before proceeding.\n",
       "phase_4_decision":   "\nYou MUST choose ONE of the following options: Call another tool, OR end the conversation turn.\n"
     
@@ -399,7 +399,7 @@ export class ConductorGenerator {
           num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
         },
         stream: true,
-        signal: abortController.signal  // Add abort signal
+        signal: abortController.signal
       } as any);
       
       for await (const part of response) {
