@@ -8,20 +8,36 @@ import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 import { ConductorGenerator } from './generators/conductor_generator';
 
+/**
+ * Main query engine that handles AI chat requests and tool usage
+ * Routes between simple chat and conductor-based tool execution
+ * Manages shared concerns: memory, datetime formatting, and prompt creation
+ */
 class QueryEngine {
   private conductorGenerator: ConductorGenerator;
   
+  /**
+   * Initialize the query engine with required generators
+   */
   constructor() {
     this.conductorGenerator = new ConductorGenerator();
   }
 
+  /**
+   * Process a simple chat query without tools
+   * @param {RequestContext} requestContext - The request context with chat history and question
+   * @param {string} memories - RAG memories to include in the prompt (empty string if disabled)
+   * @param {string} chatSystemPrompt - Pre-formatted system prompt for chat
+   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
+   * @returns {Promise<AsyncGenerator<string>>} Generator that yields chat response chunks
+   */
   async processChatQuery(
     requestContext: RequestContext,
     memories: string,
+    chatSystemPrompt: string,
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'chat_relevant_memories', memories);
-    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     TraceLogger.trace(requestContext, 'processChatQuery', chatSystemPrompt);
 
     return this.wrappedStream(
@@ -30,17 +46,25 @@ class QueryEngine {
     );
   }
 
+  /**
+   * Process a query with tools using the conductor generator
+   * @param {RequestContext} requestContext - The request context with chat history and question
+   * @param {FunctionTool[]} toolCalls - Available MCP tools for the AI to use
+   * @param {string} memories - RAG memories to include in the prompt (empty string if disabled)
+   * @param {string} chatSystemPrompt - Pre-formatted system prompt for chat
+   * @param {string} toolSystemPrompt - Pre-formatted system prompt for tool usage
+   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
+   * @returns {Promise<AsyncGenerator<string>>} Generator that yields conductor response chunks
+   */
   async processToolsQuery(
     requestContext: RequestContext,
     toolCalls: FunctionTool[],
     memories: string,
+    chatSystemPrompt: string,
+    toolSystemPrompt: string,
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'conductor_relevant_memories', memories);
-    
-    // Use conductor generator with tools
-    const toolSystemPrompt = createQueryWithToolsPrompt(formatDateTime(requestContext.currentDatetime).toString())
-    const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     
     return this.conductorGenerator.createConductorResponseGenerator(
       requestContext, 
@@ -53,7 +77,11 @@ class QueryEngine {
   }
 
   /**
-   * Wrap a stream generator with cancellation check
+   * Wrap a stream generator with cancellation check and error handling
+   * @param {AsyncGenerator<string>} stream - The source stream to wrap
+   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
+   * @returns {AsyncGenerator<string>} Wrapped stream with cancellation and error handling
+   * @private
    */
   private async *wrappedStream(
     stream: AsyncGenerator<string>,
@@ -73,6 +101,14 @@ class QueryEngine {
     }
   }
 
+  /**
+   * Main query method that routes to appropriate processing based on chat mode
+   * Handles all shared logic: memory retrieval, datetime formatting, and prompt creation
+   * @param {RequestContext} requestContext - The request context with chat history and question
+   * @param {'CHAT' | 'CONTEXT_AWARE'} chatMode - Mode determining whether to use tools
+   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
+   * @returns {Promise<AsyncGenerator<string>>} Generator that yields response chunks
+   */
   async query(
     requestContext: RequestContext,
     chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
@@ -82,15 +118,18 @@ class QueryEngine {
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
     
-    // Check memory once at the top level
+    // Extract common logic once at the top level
+    const formattedDateTime = formatDateTime(requestContext.currentDatetime).toString();
     const memories = isMemoryEnabled() ? await searchMemories(requestContext.question) : "";
+    const chatSystemPrompt = createChatPrompt(formattedDateTime);
     
     if (chatMode === 'CONTEXT_AWARE') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processToolsQuery(requestContext, toolCalls, memories, cancellationToken);
+      const toolSystemPrompt = createQueryWithToolsPrompt(formattedDateTime);
+      return this.processToolsQuery(requestContext, toolCalls, memories, chatSystemPrompt, toolSystemPrompt, cancellationToken);
     }
 
-    return this.processChatQuery(requestContext, memories, cancellationToken);
+    return this.processChatQuery(requestContext, memories, chatSystemPrompt, cancellationToken);
   }
 }
 
