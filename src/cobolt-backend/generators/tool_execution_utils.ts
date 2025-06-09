@@ -30,18 +30,18 @@ export class ToolExecutionUtils {
     try {
       // Get model info and check capabilities field
       const ollama = getOllamaClient();
-      const modelInfo = await ollama.show({ name: modelName });
+      const modelInfo = await (ollama as any).show({ name: modelName });
       
       if (requestContext) {
         TraceLogger.trace(requestContext, 'model-info-retrieved', 'success');
-        TraceLogger.trace(requestContext, 'model-capabilities', JSON.stringify(modelInfo.capabilities || []));
+        TraceLogger.trace(requestContext, 'model-capabilities', JSON.stringify((modelInfo as any).capabilities || []));
         TraceLogger.trace(requestContext, 'model-families', JSON.stringify(modelInfo.details?.families || []));
         TraceLogger.trace(requestContext, 'tool-support-check-duration-ms', Date.now() - startTime);
       }
 
       // Check if capabilities includes tools support
-      const supportsTools = modelInfo.capabilities?.includes('tools') || 
-                           modelInfo.capabilities?.includes('function_calling');
+      const supportsTools = (modelInfo as any).capabilities?.includes('tools') || 
+                           (modelInfo as any).capabilities?.includes('function_calling');
       
       if (requestContext) {
         TraceLogger.trace(requestContext, 'model-supports-tools-result', supportsTools.toString());
