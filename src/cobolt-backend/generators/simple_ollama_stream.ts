@@ -37,7 +37,7 @@ export async function* simpleChatOllamaStream(
     });
   }
   messages.push(...moreMessages);
-  messages.push({ role: 'user', content: requestContext.question });
+  messages.push({ role: 'user', content: requestContext.question }); // this adds it twice somehow
   TraceLogger.trace(requestContext, 'final_prompt', messages.map((message) => message.content).join('\n'));
   
   const ollama = getOllamaClient();

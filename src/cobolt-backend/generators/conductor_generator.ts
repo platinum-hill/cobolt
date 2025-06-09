@@ -21,7 +21,7 @@ export class ConductorGenerator {
     cancellationToken: CancellationToken = globalCancellationToken
   ): AsyncGenerator<string> {
     // Check tool support first
-    const modelSupportsTools = await ToolExecutionUtils.modelSupportsTools(MODELS.CHAT_MODEL);
+    const modelSupportsTools = await ToolExecutionUtils.modelSupportsTools(MODELS.CHAT_MODEL, requestContext);
     
     // If no tools, bail immediately to simple chat
     if (!modelSupportsTools) {

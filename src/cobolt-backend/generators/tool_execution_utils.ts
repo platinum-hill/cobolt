@@ -1,4 +1,5 @@
 import { getOllamaClient } from '../ollama_client';
+import { RequestContext, TraceLogger } from '../logger';
 
 export interface ExecutionEvent {
   type: 'tool_start' | 'tool_complete' | 'thinking_start' | 'thinking_complete';
@@ -17,23 +18,49 @@ export type ThinkingState = {
 
 export class ToolExecutionUtils {
   /**
-   * Check if a model supports tool calling
+   * Check if a model supports tool calling - fast capabilities-only check
    */
-  static async modelSupportsTools(modelName: string): Promise<boolean> {
+  static async modelSupportsTools(modelName: string, requestContext?: RequestContext): Promise<boolean> {
+    const startTime = Date.now();
+    
+    if (requestContext) {
+      TraceLogger.trace(requestContext, 'model-supports-tools-check-start', modelName);
+    }
+
     try {
+      // Get model info and check capabilities field
       const ollama = getOllamaClient();
       const modelInfo = await ollama.show({ name: modelName });
       
-      // Check model info for tool support indicators
-      // This might vary by model - you'd need to check what Ollama returns
-      return modelInfo.details?.families?.includes('tools') || 
-             modelInfo.template?.includes('tools') ||
-             modelName.includes('tool'); // fallback heuristic
+      if (requestContext) {
+        TraceLogger.trace(requestContext, 'model-info-retrieved', 'success');
+        TraceLogger.trace(requestContext, 'model-capabilities', JSON.stringify(modelInfo.capabilities || []));
+        TraceLogger.trace(requestContext, 'model-families', JSON.stringify(modelInfo.details?.families || []));
+        TraceLogger.trace(requestContext, 'tool-support-check-duration-ms', Date.now() - startTime);
+      }
+
+      // Check if capabilities includes tools support
+      const supportsTools = modelInfo.capabilities?.includes('tools') || 
+                           modelInfo.capabilities?.includes('function_calling');
+      
+      if (requestContext) {
+        TraceLogger.trace(requestContext, 'model-supports-tools-result', supportsTools.toString());
+      }
+      
+      return supportsTools;
+      
     } catch (error) {
+      if (requestContext) {
+        TraceLogger.trace(requestContext, 'model-supports-tools-error', error instanceof Error ? error.message : String(error));
+        TraceLogger.trace(requestContext, 'model-supports-tools-result', 'false');
+        TraceLogger.trace(requestContext, 'tool-support-check-duration-ms', Date.now() - startTime);
+      }
       console.warn(`Could not check tool support for ${modelName}:`, error);
       return false; // assume no tools if we can't check
     }
-  }  
+  }
+
+  
   
   static createToolCallErrorInfo(toolName: string, toolArguments: string, errorMessage: string, duration_ms: number) {
     return {
