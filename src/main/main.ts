@@ -390,10 +390,14 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
       await persistentChatHistory.updateChatTitle(chatId, newTitle);
     }
 
-    // Load the chat history for this specific chat
+    // Load the chat history for this specific chat (excluding the current message to avoid duplication)
     chatHistory.clear();
     const messages = await persistentChatHistory.getMessagesForChat(chatId);
     messages.forEach((msg: any) => {
+      // Skip the current user message since it will be added by the query engine
+      if (msg.role === 'user' && msg.content === message) {
+        return; // Skip this message to avoid duplication
+      }
       if (msg.role === 'user') {
         chatHistory.addUserMessage(msg.content);
       } else if (msg.role === 'assistant') {
