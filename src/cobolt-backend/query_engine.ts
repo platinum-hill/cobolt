@@ -1,8 +1,8 @@
 import { RequestContext, TraceLogger } from './logger';
 import { formatDateTime } from './datetime_parser';
-import { simpleChatOllamaStream } from './simple_ollama_stream';
+import { simpleChatOllamaStream } from './generators/simple_ollama_stream';
 import { createChatPrompt, createQueryWithToolsPrompt } from './prompt_templates';
-import { searchMemories } from './memory';
+import { searchMemories, isMemoryEnabled } from './memory';
 import { FunctionTool } from './ollama_tools';
 import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
@@ -17,15 +17,15 @@ class QueryEngine {
 
   async processChatQuery(
     requestContext: RequestContext,
+    memories: string,
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
-    const relevantMemories = await searchMemories(requestContext.question);
-    TraceLogger.trace(requestContext, 'chat_relevant_memories', relevantMemories);
+    TraceLogger.trace(requestContext, 'chat_relevant_memories', memories);
     const chatSystemPrompt = createChatPrompt(formatDateTime(requestContext.currentDatetime).toString());
     TraceLogger.trace(requestContext, 'processChatQuery', chatSystemPrompt);
 
     return this.wrappedStream(
-      simpleChatOllamaStream(requestContext, chatSystemPrompt, relevantMemories),
+      simpleChatOllamaStream(requestContext, chatSystemPrompt, memories),
       cancellationToken
     );
   }
@@ -33,10 +33,9 @@ class QueryEngine {
   async processToolsQuery(
     requestContext: RequestContext,
     toolCalls: FunctionTool[],
+    memories: string,
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
-    // Get RAG memories
-    const memories = await searchMemories(requestContext.question);
     TraceLogger.trace(requestContext, 'conductor_relevant_memories', memories);
     
     // Use conductor generator with tools
@@ -83,12 +82,15 @@ class QueryEngine {
     TraceLogger.trace(requestContext, 'user_question', requestContext.question);
     TraceLogger.trace(requestContext, 'current_date', formatDateTime(requestContext.currentDatetime));
     
+    // Check memory once at the top level
+    const memories = isMemoryEnabled() ? await searchMemories(requestContext.question) : "";
+    
     if (chatMode === 'CONTEXT_AWARE') {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
-      return this.processToolsQuery(requestContext, toolCalls, cancellationToken);
+      return this.processToolsQuery(requestContext, toolCalls, memories, cancellationToken);
     }
 
-    return this.processChatQuery(requestContext, cancellationToken);
+    return this.processChatQuery(requestContext, memories, cancellationToken);
   }
 }
 

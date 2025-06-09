@@ -1,9 +1,9 @@
 import { Message } from 'ollama';
 import log from 'electron-log/main';
-import { addToMemory } from './memory';
-import { RequestContext, TraceLogger } from './logger';
-import { MODELS } from './model_manager';
-import { getOllamaClient } from './ollama_client';
+import { addToMemory } from '../memory';
+import { RequestContext, TraceLogger } from '../logger';
+import { MODELS } from '../model_manager';
+import { getOllamaClient } from '../ollama_client';
 
 const defaultTemperature = 1.0;
 const defaultTopK = 64;

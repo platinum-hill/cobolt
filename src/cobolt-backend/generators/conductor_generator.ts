@@ -1,6 +1,6 @@
 import { RequestContext } from '../logger';
 import { getOllamaClient } from '../ollama_client';
-import { simpleChatOllamaStream } from "../simple_ollama_stream";
+import { simpleChatOllamaStream } from "./simple_ollama_stream";
 import { MODELS } from '../model_manager';
 import { FunctionTool } from '../ollama_tools';
 import { Message } from 'ollama';
