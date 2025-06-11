@@ -21,7 +21,7 @@ async function main() {
       });
     };
 
-    let currentMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT';
+    let currentMode: 'CHAT' | 'CONTEXT_AWARE' = 'CONTEXT_AWARE';
     const chatHistory = new ChatHistory();
   
     try {
