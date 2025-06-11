@@ -1,15 +1,12 @@
-import { Ollama, Message, ChatResponse } from 'ollama';
+import { Ollama, Message, ChatResponse} from 'ollama';
 import { exec, spawn } from 'child_process';
 import log from 'electron-log/main';
-import { FunctionTool } from './ollama_tools';
 import * as os from 'os';
 import configStore from './data_models/config_store';
 import { addToMemory } from './memory';
 import { RequestContext, TraceLogger } from './logger';
-import { formatDateTime } from './datetime_parser';
-import { createQueryWithToolsPrompt } from './prompt_templates';
-import  { ChatHistory } from './chat_history';
-import { MODELS } from './model_manager'
+import { MODELS } from './model_manager';
+import { FunctionTool } from './ollama_tools';
 import { BrowserWindow } from 'electron';
 
 let progressWindow: BrowserWindow | null = null;
@@ -461,9 +458,12 @@ async function* simpleChatOllamaStream(requestContext: RequestContext,
 
 /**
  * Send a simple query to ollama with the specified tools.
- * @param messages - a slice of messages objects
- * @param toolCalls - the list of FunctionTools to pass with the query
- * @returns - The response from the LLM
+ * Uses the dedicated TOOLS_MODEL for efficient tool calling.
+ * @param requestContext - Request context with user query
+ * @param systemPrompt - System prompt for tool selection
+ * @param toolCalls - List of available tools
+ * @param memories - User memories for context
+ * @returns The response from the LLM with tool calls
  */
 async function queryOllamaWithTools(requestContext: RequestContext,
   systemPrompt: string,
@@ -513,29 +513,6 @@ function logExecOutput(platform: string) {
       log.warn(`${platform} exec stderr:`, stderr);
     }
   };
-}
-
-if (require.main === module) {
-  (async () => {
-    await initOllama();
-    const toolCalls: FunctionTool[] = [];
-    const requestContext = {
-      requestId: '123',
-      currentDatetime: new Date(),
-      question: 'Give me all of my calender events since last week from friends',
-      chatHistory: new ChatHistory(),
-    };
-    const toolUserMessage = createQueryWithToolsPrompt(formatDateTime(new Date()).toString())
-    const response = await queryOllamaWithTools(requestContext, toolUserMessage, toolCalls);
-    console.log(response)
-    if (!response.message.tool_calls) {
-      console.log('No tool calls');
-      return;
-    }
-    for (const toolCall of response.message.tool_calls) {
-      console.log('Tool call:', toolCall);
-    }
-  })();
 }
 
 export { initOllama, getOllamaClient, queryOllamaWithTools, simpleChatOllamaStream, stopOllama, setProgressWindow };
