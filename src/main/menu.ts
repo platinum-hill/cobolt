@@ -40,15 +40,48 @@ export default class MenuBuilder {
   setupDevelopmentEnvironment(): void {
     this.mainWindow.webContents.on('context-menu', (_, props) => {
       const { x, y } = props;
+      const { selectionText, editFlags } = props;
 
-      Menu.buildFromTemplate([
-        {
-          label: 'Inspect element',
-          click: () => {
-            this.mainWindow.webContents.inspectElement(x, y);
-          },
+      const menuItems: MenuItemConstructorOptions[] = [];
+
+      // Add standard editing options based on context
+      if (editFlags.canUndo) {
+        menuItems.push({ label: 'Undo', role: 'undo' });
+      }
+      if (editFlags.canRedo) {
+        menuItems.push({ label: 'Redo', role: 'redo' });
+      }
+      if (menuItems.length > 0) {
+        menuItems.push({ type: 'separator' });
+      }
+
+      if (editFlags.canCut) {
+        menuItems.push({ label: 'Cut', role: 'cut' });
+      }
+      if (editFlags.canCopy || selectionText) {
+        menuItems.push({ label: 'Copy', role: 'copy' });
+      }
+      if (editFlags.canPaste) {
+        menuItems.push({ label: 'Paste', role: 'paste' });
+      }
+      if (editFlags.canSelectAll) {
+        menuItems.push({ label: 'Select All', role: 'selectAll' });
+      }
+
+      // Add separator before developer options if we have standard items
+      if (menuItems.length > 0) {
+        menuItems.push({ type: 'separator' });
+      }
+
+      // Add developer option
+      menuItems.push({
+        label: 'Inspect element',
+        click: () => {
+          this.mainWindow.webContents.inspectElement(x, y);
         },
-      ]).popup({ window: this.mainWindow });
+      });
+
+      Menu.buildFromTemplate(menuItems).popup({ window: this.mainWindow });
     });
   }
 

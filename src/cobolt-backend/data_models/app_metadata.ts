@@ -3,6 +3,7 @@ import Store from 'electron-store';
 type AppMetadataSchema = {
   setupComplete: boolean;
   memoryEnabled: boolean;
+  conductorEnabled: boolean;
 };
 
 interface TypedStore<T extends Record<string, any>> extends Store<T> {
@@ -16,6 +17,7 @@ const store = new Store<AppMetadataSchema>({
   defaults: {
     setupComplete: false,
     memoryEnabled: false,
+    conductorEnabled: true,
   },
 }) as TypedStore<AppMetadataSchema>;
 
@@ -39,6 +41,13 @@ const appMetadata = {
 
   setMemoryEnabled: (enabled: boolean) => {
     store.set('memoryEnabled', enabled);
+  },
+  getConductorEnabled: (): boolean => {
+    return store.get('conductorEnabled');
+  },
+
+  setConductorEnabled: (enabled: boolean) => {
+    store.set('conductorEnabled', enabled);
   },
 };
 
