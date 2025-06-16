@@ -4,16 +4,22 @@ import log from 'electron-log/main';
 
 export class AppUpdater {
   private mainWindow: BrowserWindow | null = null;
+
   private isCheckingUpdate = false;
+
   private checkPromise: Promise<any> | null = null;
+
   private lastStatus: string = 'idle';
+
   private lastInfo: any = null;
+
   private lastError: string | undefined = undefined;
+
   private lastProgress: any = undefined;
 
   constructor() {
     log.info('[AppUpdater] Initializing');
-    
+
     // Configure auto-updater
     autoUpdater.logger = log;
     autoUpdater.autoDownload = false;
@@ -24,12 +30,14 @@ export class AppUpdater {
       autoUpdater.setFeedURL({
         provider: 'github',
         owner: 'platinum-hill',
-        repo: 'cobolt'
+        repo: 'cobolt',
       });
     }
 
     // Log configuration
-    log.info(`[AppUpdater] Version: ${app.getVersion()}, Packaged: ${app.isPackaged}`);
+    log.info(
+      `[AppUpdater] Version: ${app.getVersion()}, Packaged: ${app.isPackaged}`,
+    );
 
     // Set up handlers
     this.setupEventHandlers();
@@ -76,75 +84,6 @@ export class AppUpdater {
   }
 
   private setupIpcHandlers() {
-    ipcMain.handle('check-for-updates', async () => {
-      if (!app.isPackaged) {
-        this.sendStatusToWindow('not-available', { version: app.getVersion() });
-        return { 
-          success: true, 
-          updateInfo: null,
-          message: 'Updates only available in packaged app' 
-        };
-      }
-
-      // If already checking, return the existing promise
-      if (this.isCheckingUpdate && this.checkPromise) {
-        try {
-          const result = await this.checkPromise;
-          return { success: true, updateInfo: result?.updateInfo };
-        } catch (error) {
-          return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-        }
-      }
-      
-      try {
-        this.isCheckingUpdate = true;
-        // Use checkForUpdates() instead of checkForUpdatesAndNotify()
-        this.checkPromise = autoUpdater.checkForUpdates();
-        const result = await this.checkPromise;
-        return { success: true, updateInfo: result?.updateInfo };
-      } catch (error) {
-        log.error('[AppUpdater] Check failed:', error);
-        this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
-        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-      } finally {
-        this.isCheckingUpdate = false;
-        this.checkPromise = null;
-      }
-    });
-
-    ipcMain.handle('download-update', async () => {
-      try {
-        log.info('[AppUpdater] Download request received');
-        
-        // Check if already downloaded first
-        if (this.lastStatus === 'downloaded') {
-          log.info('[AppUpdater] Update already downloaded, notifying UI');
-          this.sendStatusToWindow('downloaded', this.lastInfo);
-          return { success: true, alreadyDownloaded: true };
-        }
-        
-        // If we have update info but no download yet, start download
-        if (this.lastInfo && this.lastStatus === 'available') {
-          log.info('[AppUpdater] Starting download for available update');
-          this.sendStatusToWindow('downloading', this.lastInfo, undefined, { percent: 0, transferred: 0, total: 0 });
-          
-          await autoUpdater.downloadUpdate();
-          log.info('[AppUpdater] Download completed');
-          return { success: true };
-        }
-        
-        // No update available
-        log.warn('[AppUpdater] No update available to download');
-        this.sendStatusToWindow('error', null, 'No update available to download');
-        return { success: false, error: 'No update available to download' };
-        
-      } catch (error) {
-        log.error('[AppUpdater] Download failed:', error);
-        this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
-        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-      }
-    });
-
     ipcMain.handle('install-update', () => {
       autoUpdater.quitAndInstall(false, true);
       return { success: true };
@@ -171,42 +110,43 @@ export class AppUpdater {
     ipcMain.handle('check-for-updates-menu', async () => {
       if (!app.isPackaged) {
         this.sendStatusToWindow('not-available', { version: app.getVersion() });
-        return { 
-          success: true, 
+        return {
+          success: true,
           updateInfo: null,
-          message: 'Updates only available in packaged app' 
+          message: 'Updates only available in packaged app',
         };
       }
 
-      // If already checking, just send current status
+      // If already checking, wait for the result
       if (this.isCheckingUpdate && this.checkPromise) {
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send('update-status', {
-            status: 'checking',
-            info: this.lastInfo,
-            error: this.lastError,
-            progress: this.lastProgress,
-          });
-        }
         try {
           const result = await this.checkPromise;
           return { success: true, updateInfo: result?.updateInfo };
         } catch (error) {
-          return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
         }
       }
-      
+
       try {
         this.isCheckingUpdate = true;
         this.sendStatusToWindow('checking');
-        // Use checkForUpdates() instead of checkForUpdatesAndNotify()
         this.checkPromise = autoUpdater.checkForUpdates();
         const result = await this.checkPromise;
         return { success: true, updateInfo: result?.updateInfo };
       } catch (error) {
         log.error('[AppUpdater] Menu check failed:', error);
-        this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
-        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        this.sendStatusToWindow(
+          'error',
+          null,
+          error instanceof Error ? error.message : 'Unknown error',
+        );
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
       } finally {
         this.isCheckingUpdate = false;
         this.checkPromise = null;
@@ -222,54 +162,69 @@ export class AppUpdater {
     ipcMain.handle('download-and-install', async () => {
       try {
         log.info('[AppUpdater] Download and install requested');
-        
+
         // Check current status
         if (this.lastStatus === 'downloaded') {
           log.info('[AppUpdater] Update already downloaded, ready to install');
           return { success: true, readyToInstall: true };
         }
-        
+
         if (this.lastStatus === 'available' && this.lastInfo) {
           log.info('[AppUpdater] Starting download...');
-          this.sendStatusToWindow('downloading', this.lastInfo, undefined, { percent: 0, transferred: 0, total: 0 });
-          
+          this.sendStatusToWindow('downloading', this.lastInfo, undefined, {
+            percent: 0,
+            transferred: 0,
+            total: 0,
+          });
+
           // Download the update
           await autoUpdater.downloadUpdate();
-          
+
           log.info('[AppUpdater] Download completed, ready to install');
           return { success: true, readyToInstall: true };
         }
-        
+
         return { success: false, error: 'No update available to download' };
-        
       } catch (error) {
         log.error('[AppUpdater] Download and install failed:', error);
-        this.sendStatusToWindow('error', null, error instanceof Error ? error.message : 'Unknown error');
-        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        this.sendStatusToWindow(
+          'error',
+          null,
+          error instanceof Error ? error.message : 'Unknown error',
+        );
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
       }
     });
   }
 
-  private sendStatusToWindow(status: string, info?: any, error?: string, progress?: any) {
+  private sendStatusToWindow(
+    status: string,
+    info?: any,
+    error?: string,
+    progress?: any,
+  ) {
     this.lastStatus = status;
     this.lastInfo = info;
     this.lastError = error;
     this.lastProgress = progress;
-    
+
     log.info(`[AppUpdater] Sending status to window: ${status}`, {
       hasMainWindow: !!this.mainWindow,
       isDestroyed: this.mainWindow?.isDestroyed(),
       info: info ? { version: info.version } : undefined,
       error,
-      progress
+      progress,
     });
-    
+
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
         status,
         info,
         error,
-        progress
+        progress,
       });
       log.info(`[AppUpdater] Status sent to renderer: ${status}`);
     } else {
@@ -283,24 +238,21 @@ export class AppUpdater {
       return;
     }
 
-    // Check for updates after a longer delay to ensure UI is ready
-    // and use the same invoke pattern as manual checks
+    // Check for updates after a delay to ensure UI is ready
     setTimeout(async () => {
       log.info('[AppUpdater] Starting automatic update check');
-      
+
       if (!this.mainWindow || this.mainWindow.isDestroyed()) {
         log.warn('[AppUpdater] Main window not ready for startup check');
         return;
       }
-      
+
       // Send the check-for-updates-menu event to trigger the same flow as manual checks
       // This ensures the UI component is ready and listening
       this.mainWindow.webContents.send('check-for-updates-menu');
-      log.info('[AppUpdater] Sent check-for-updates-menu event for startup check');
-    }, 3000); // Increased to 10 seconds to ensure UI is fully loaded
-  }
-
-  checkForUpdatesManually() {
-    autoUpdater.checkForUpdatesAndNotify();
+      log.info(
+        '[AppUpdater] Sent check-for-updates-menu event for startup check',
+      );
+    }, 3000);
   }
 }

@@ -201,7 +201,13 @@ export default class MenuBuilder {
         : subMenuViewProd;
 
     // Cast to MenuItemConstructorOptions[] for compatibility with Menu.buildFromTemplate
-    return [subMenuAbout, subMenuEdit, subMenuView, subMenuWindow, subMenuHelp] as MenuItemConstructorOptions[];
+    return [
+      subMenuAbout,
+      subMenuEdit,
+      subMenuView,
+      subMenuWindow,
+      subMenuHelp,
+    ] as MenuItemConstructorOptions[];
   }
 
   buildDefaultTemplate(): MenuItemConstructorOptions[] {
@@ -284,7 +290,9 @@ export default class MenuBuilder {
           {
             label: 'Search Issues',
             click() {
-              shell.openExternal('https://github.com/platinum-hill/cobolt/issues');
+              shell.openExternal(
+                'https://github.com/platinum-hill/cobolt/issues',
+              );
             },
           },
           { type: 'separator' },
