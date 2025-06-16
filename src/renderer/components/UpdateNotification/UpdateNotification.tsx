@@ -32,11 +32,21 @@ function UpdateNotification() {
   });
   const [showNotification, setShowNotification] = useState(false);
   const [userDismissed, setUserDismissed] = useState(false);
-  const [currentVersion, setCurrentVersion] = useState<string>('');
-  
+
   // Single ref for component mounted state
   const mounted = useRef(true);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userDismissedRef = useRef(userDismissed);
+  const updateStatusRef = useRef(updateStatus);
+
+  // Keep refs in sync
+  useEffect(() => {
+    userDismissedRef.current = userDismissed;
+  }, [userDismissed]);
+
+  useEffect(() => {
+    updateStatusRef.current = updateStatus;
+  }, [updateStatus]);
 
   useEffect(() => {
     mounted.current = true;
@@ -46,13 +56,15 @@ function UpdateNotification() {
     const initializeUpdateStatus = async () => {
       try {
         // Get current version once
-        const version = await window.electron.ipcRenderer.invoke('get-app-version');
+        const version =
+          await window.electron.ipcRenderer.invoke('get-app-version');
         if (mounted.current) {
-          setCurrentVersion(version);
+          log.info(`[UpdateNotification] Current version: ${version}`);
         }
 
         // Get current update status
-        const status = await window.electron.ipcRenderer.invoke('get-update-status');
+        const status =
+          await window.electron.ipcRenderer.invoke('get-update-status');
         if (!mounted.current) return;
 
         // Handle different status scenarios
@@ -98,8 +110,9 @@ function UpdateNotification() {
       clearHideTimeout();
 
       // Handle user dismissal for available updates
-      if (data.status === 'available' && userDismissed) {
-        const isSameVersion = updateStatus.info?.version === data.info?.version;
+      if (data.status === 'available' && userDismissedRef.current) {
+        const isSameVersion =
+          updateStatusRef.current.info?.version === data.info?.version;
         if (isSameVersion) {
           log.info('[UpdateNotification] User already dismissed this version');
           return;
@@ -114,7 +127,12 @@ function UpdateNotification() {
       });
 
       // Show notification for important statuses
-      const importantStatuses = ['available', 'downloading', 'downloaded', 'error'];
+      const importantStatuses = [
+        'available',
+        'downloading',
+        'downloaded',
+        'error',
+      ];
       if (importantStatuses.includes(data.status)) {
         setShowNotification(true);
         setUserDismissed(false);
@@ -142,7 +160,9 @@ function UpdateNotification() {
       setShowNotification(true);
 
       try {
-        const result = await window.electron.ipcRenderer.invoke('check-for-updates-menu');
+        const result = await window.electron.ipcRenderer.invoke(
+          'check-for-updates-menu',
+        );
         if (!mounted.current) return;
 
         if (result.success) {
@@ -184,32 +204,43 @@ function UpdateNotification() {
     // Initialize and set up event listeners
     initializeUpdateStatus();
     window.electron.ipcRenderer.on('update-status', handleUpdateStatus);
-    window.electron.ipcRenderer.on('check-for-updates-menu', handleCheckForUpdatesMenu);
+    window.electron.ipcRenderer.on(
+      'check-for-updates-menu',
+      handleCheckForUpdatesMenu,
+    );
 
     // Cleanup function
     return () => {
       mounted.current = false;
       clearHideTimeout();
       log.info('[UpdateNotification] Component unmounting');
-      window.electron.ipcRenderer.removeListener('update-status', handleUpdateStatus);
-      window.electron.ipcRenderer.removeListener('check-for-updates-menu', handleCheckForUpdatesMenu);
+      window.electron.ipcRenderer.removeListener(
+        'update-status',
+        handleUpdateStatus,
+      );
+      window.electron.ipcRenderer.removeListener(
+        'check-for-updates-menu',
+        handleCheckForUpdatesMenu,
+      );
     };
-  }, []); // Empty dependency array - only run once
+  }, []);
 
   const handleDownloadAndInstall = async () => {
     try {
       log.info('[UpdateNotification] Starting download');
-      
-      setUpdateStatus(prev => ({
+
+      setUpdateStatus((prev) => ({
         ...prev,
         status: 'downloading',
         progress: { percent: 0, transferred: 0, total: 0 },
       }));
 
-      const result = await window.electron.ipcRenderer.invoke('download-and-install');
+      const result = await window.electron.ipcRenderer.invoke(
+        'download-and-install',
+      );
 
       if (result.success && result.readyToInstall) {
-        setUpdateStatus(prev => ({
+        setUpdateStatus((prev) => ({
           ...prev,
           status: 'downloaded',
         }));
@@ -264,12 +295,17 @@ function UpdateNotification() {
             <span>Update available: v{updateStatus.info?.version}</span>
             <div className="update-actions">
               <button
+                type="button"
                 onClick={handleDownloadAndInstall}
                 className="update-button primary"
               >
                 Download & Install
               </button>
-              <button onClick={handleDismiss} className="dismiss-button">
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="dismiss-button"
+              >
                 Later
               </button>
             </div>
@@ -279,7 +315,7 @@ function UpdateNotification() {
       case 'not-available':
         return (
           <div className="update-content up-to-date">
-            <span>You're up to date!</span>
+            <span>You&apos;re up to date!</span>
           </div>
         );
 
@@ -291,8 +327,8 @@ function UpdateNotification() {
             {updateStatus.progress && updateStatus.progress.percent > 0 && (
               <div className="progress-info">
                 <div className="progress-bar">
-                  <div 
-                    className="progress-fill" 
+                  <div
+                    className="progress-fill"
                     style={{ width: `${updateStatus.progress.percent}%` }}
                   />
                 </div>
@@ -309,16 +345,25 @@ function UpdateNotification() {
           <div className="update-content downloaded">
             <span>Update ready to install! v{updateStatus.info?.version}</span>
             <div className="update-actions">
-              <button onClick={handleInstall} className="update-button primary">
+              <button
+                type="button"
+                onClick={handleInstall}
+                className="update-button primary"
+              >
                 Restart & Install Now
               </button>
               <button
+                type="button"
                 onClick={handleInstallLater}
                 className="update-button secondary"
               >
                 Install on Next Restart
               </button>
-              <button onClick={handleDismiss} className="dismiss-button">
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="dismiss-button"
+              >
                 Later
               </button>
             </div>
@@ -332,7 +377,11 @@ function UpdateNotification() {
             {updateStatus.error && (
               <span className="error-detail">{updateStatus.error}</span>
             )}
-            <button onClick={handleDismiss} className="dismiss-button">
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="dismiss-button"
+            >
               Dismiss
             </button>
           </div>

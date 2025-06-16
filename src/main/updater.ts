@@ -2,7 +2,7 @@ import { autoUpdater } from 'electron-updater';
 import { BrowserWindow, ipcMain, app } from 'electron';
 import log from 'electron-log/main';
 
-export class AppUpdater {
+class AppUpdater {
   private mainWindow: BrowserWindow | null = null;
 
   private isCheckingUpdate = false;
@@ -256,3 +256,5 @@ export class AppUpdater {
     }, 3000);
   }
 }
+
+export default AppUpdater;

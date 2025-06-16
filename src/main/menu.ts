@@ -7,7 +7,6 @@ import {
 } from 'electron';
 import log from 'electron-log/main';
 
-// Extend the MenuItemConstructorOptions type for macOS-specific properties
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
   selector?: string;
   submenu?: DarwinMenuItemConstructorOptions[] | Menu;

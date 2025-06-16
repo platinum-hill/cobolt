@@ -37,7 +37,7 @@ import {
 } from '../cobolt-backend/utils/error_manager';
 import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
 import { stopOllama, setProgressWindow } from '../cobolt-backend/ollama_client';
-import { AppUpdater } from './updater';
+import AppUpdater from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
@@ -673,7 +673,6 @@ ipcMain.handle('refresh-mcp-connections', async () => {
   }
 });
 
-// Add this with other IPC handlers (around line 450-500)
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
