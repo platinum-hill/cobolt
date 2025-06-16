@@ -60,6 +60,17 @@ declare global {
           channel: string,
           callback: (...args: any[]) => void,
         ) => void;
+        invoke(channel: 'download-update'): Promise<any>;
+        invoke(channel: 'download-and-install'): Promise<{
+          success: boolean;
+          error?: string;
+          readyToInstall?: boolean;
+        }>;
+        invoke(channel: 'install-update'): Promise<any>;
+        invoke(channel: 'enable-auto-install'): Promise<any>;
+        invoke(channel: 'get-update-status'): Promise<any>;
+        invoke(channel: 'check-for-updates-menu'): Promise<any>;
+        invoke(channel: 'get-app-version'): Promise<string>;
       };
     };
   }
