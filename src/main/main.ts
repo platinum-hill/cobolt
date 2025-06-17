@@ -37,10 +37,12 @@ import {
 } from '../cobolt-backend/utils/error_manager';
 import { loadConfig } from '../cobolt-backend/connectors/mcp_tools';
 import { stopOllama, setProgressWindow } from '../cobolt-backend/ollama_client';
+import AppUpdater from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let loadingWindow: BrowserWindow | null = null;
 let initializationComplete: Promise<void> | null = null;
+let appUpdater: AppUpdater | null = null;
 
 log.initialize();
 
@@ -188,6 +190,12 @@ const createWindow = async (): Promise<void> => {
   // Set progress window for ollama client
   setProgressWindow(mainWindow);
 
+  // Initialize app updater after window is created
+  log.info('[Main] Initializing app updater');
+  appUpdater = new AppUpdater();
+  appUpdater.setMainWindow(mainWindow);
+  log.info('[Main] App updater initialized');
+
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   mainWindow.on('ready-to-show', async () => {
@@ -252,6 +260,14 @@ const createWindow = async (): Promise<void> => {
         });
       }
     }, 1000); // Delay showing dialog to ensure UI is fully loaded
+
+    // Check for updates on startup
+    if (app.isPackaged) {
+      log.info('[Main] App is packaged, will check for updates on startup');
+      appUpdater?.checkForUpdatesOnStartup();
+    } else {
+      log.info('[Main] App is not packaged, skipping auto-update check');
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -655,6 +671,10 @@ ipcMain.handle('refresh-mcp-connections', async () => {
       ],
     };
   }
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });
 
 // Global error handlers
