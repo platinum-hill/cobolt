@@ -121,7 +121,13 @@ class AppUpdater {
       if (this.isCheckingUpdate && this.checkPromise) {
         try {
           const result = await this.checkPromise;
-          return { success: true, updateInfo: result?.updateInfo };
+
+          // Only return updateInfo if an update is actually available
+          return {
+            success: true,
+            updateInfo:
+              this.lastStatus === 'available' ? result?.updateInfo : null,
+          };
         } catch (error) {
           return {
             success: false,
@@ -135,7 +141,13 @@ class AppUpdater {
         this.sendStatusToWindow('checking');
         this.checkPromise = autoUpdater.checkForUpdates();
         const result = await this.checkPromise;
-        return { success: true, updateInfo: result?.updateInfo };
+
+        // Only return updateInfo if an update is actually available
+        return {
+          success: true,
+          updateInfo:
+            this.lastStatus === 'available' ? result?.updateInfo : null,
+        };
       } catch (error) {
         log.error('[AppUpdater] Menu check failed:', error);
         this.sendStatusToWindow(
@@ -165,12 +177,10 @@ class AppUpdater {
 
         // Check current status
         if (this.lastStatus === 'downloaded') {
-          log.info('[AppUpdater] Update already downloaded, ready to install');
           return { success: true, readyToInstall: true };
         }
 
         if (this.lastStatus === 'available' && this.lastInfo) {
-          log.info('[AppUpdater] Starting download...');
           this.sendStatusToWindow('downloading', this.lastInfo, undefined, {
             percent: 0,
             transferred: 0,
@@ -211,14 +221,6 @@ class AppUpdater {
     this.lastError = error;
     this.lastProgress = progress;
 
-    log.info(`[AppUpdater] Sending status to window: ${status}`, {
-      hasMainWindow: !!this.mainWindow,
-      isDestroyed: this.mainWindow?.isDestroyed(),
-      info: info ? { version: info.version } : undefined,
-      error,
-      progress,
-    });
-
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
         status,
@@ -226,7 +228,6 @@ class AppUpdater {
         error,
         progress,
       });
-      log.info(`[AppUpdater] Status sent to renderer: ${status}`);
     } else {
       log.warn('[AppUpdater] Cannot send status - main window not available');
     }
@@ -234,7 +235,6 @@ class AppUpdater {
 
   checkForUpdatesOnStartup() {
     if (!app.isPackaged) {
-      log.info('[AppUpdater] Skipping startup check - not packaged');
       return;
     }
 
@@ -247,8 +247,14 @@ class AppUpdater {
         return;
       }
 
+      // Clear any previous state before checking
+      this.lastStatus = 'idle';
+      this.lastInfo = null;
+      this.lastError = undefined;
+      this.lastProgress = undefined;
+
       // Send the check-for-updates-menu event to trigger the same flow as manual checks
-      // This ensures the UI component is ready and listening
+      // This ensures the UI component is ready and
       this.mainWindow.webContents.send('check-for-updates-menu');
       log.info(
         '[AppUpdater] Sent check-for-updates-menu event for startup check',

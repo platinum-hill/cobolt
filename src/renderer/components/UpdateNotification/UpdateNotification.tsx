@@ -50,7 +50,6 @@ function UpdateNotification() {
 
   useEffect(() => {
     mounted.current = true;
-    log.info('[UpdateNotification] Component mounted');
 
     // Initialize component state
     const initializeUpdateStatus = async () => {
@@ -106,7 +105,13 @@ function UpdateNotification() {
     const handleUpdateStatus = (_event: any, data: any) => {
       if (!mounted.current) return;
 
-      log.info(`[UpdateNotification] Received update status: ${data.status}`);
+      log.info(`[UpdateNotification] Received update status: ${data.status}`, {
+        info: data.info,
+        error: data.error,
+        progress: data.progress,
+        currentStatus: updateStatusRef.current.status,
+        currentVersion: updateStatusRef.current.info?.version,
+      });
       clearHideTimeout();
 
       // Handle user dismissal for available updates
@@ -114,7 +119,6 @@ function UpdateNotification() {
         const isSameVersion =
           updateStatusRef.current.info?.version === data.info?.version;
         if (isSameVersion) {
-          log.info('[UpdateNotification] User already dismissed this version');
           return;
         }
       }
@@ -151,7 +155,10 @@ function UpdateNotification() {
     const handleCheckForUpdatesMenu = async () => {
       if (!mounted.current) return;
 
-      log.info('[UpdateNotification] Menu-triggered update check');
+      log.info('[UpdateNotification] Menu-triggered update check', {
+        currentStatus: updateStatusRef.current.status,
+        currentVersion: updateStatusRef.current.info?.version,
+      });
       setUserDismissed(false);
       clearHideTimeout();
 
@@ -168,6 +175,9 @@ function UpdateNotification() {
         if (result.success) {
           if (result.updateInfo) {
             // Update available
+            log.info(
+              `[UpdateNotification] Update available: v${result.updateInfo.version}`,
+            );
             setUpdateStatus({
               status: 'available',
               info: {
@@ -187,6 +197,7 @@ function UpdateNotification() {
           }
         } else {
           // Error occurred
+          log.error('[UpdateNotification] Update check error:', result.error);
           setUpdateStatus({
             status: 'error',
             error: result.error || 'Failed to check for updates',
@@ -213,7 +224,6 @@ function UpdateNotification() {
     return () => {
       mounted.current = false;
       clearHideTimeout();
-      log.info('[UpdateNotification] Component unmounting');
       window.electron.ipcRenderer.removeListener(
         'update-status',
         handleUpdateStatus,
