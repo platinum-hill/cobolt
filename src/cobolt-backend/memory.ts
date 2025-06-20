@@ -64,14 +64,6 @@ function initMemory(): void {
  * Adds messages to the memory store
  * @param messages Array of messages to add to memory
  */
-/* og
-async function addToMemory(messages: Message[]): Promise<void> {
-    if (!memoryEnabled) {
-      return;
-    }
-    await memory?.add(messages, {userId: "userid"});
-}
-*/
 async function addToMemory(messages: Message[]): Promise<void> {
     if (!memoryEnabled) {
       return;

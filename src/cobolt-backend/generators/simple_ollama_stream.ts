@@ -11,10 +11,6 @@ const defaultTopP = 0.95;
 
 /**
  * Given a prompt gets the user a query to ollama with the specified tools
- * @param requestContext - request context with chat history and question
- * @param systemPrompt - system prompt for the chat
- * @param memories - optional memories to include
- * @param moreMessages - additional messages to include
  * @returns An generator object that yields the response from the LLM
  */
 export async function* simpleChatOllamaStream(

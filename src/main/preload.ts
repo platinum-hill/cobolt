@@ -27,6 +27,14 @@ const validChannels = {
     'update-core-models',
     'report-error',
     'refresh-mcp-connections',
+    'check-for-updates',
+    'check-for-updates-menu',
+    'download-update',
+    'download-and-install',
+    'install-update',
+    'enable-auto-install',
+    'get-update-status',
+    'get-app-version',
   ],
   on: [
     'message-response',
@@ -36,6 +44,8 @@ const validChannels = {
     'setup-progress',
     'show-error-dialog',
     'refresh-models-list',
+    'update-status',
+    'check-for-updates-menu',
   ],
 };
 

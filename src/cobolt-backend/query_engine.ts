@@ -25,11 +25,6 @@ class QueryEngine {
 
   /**
    * Process a simple chat query without tools
-   * @param {RequestContext} requestContext - The request context with chat history and question
-   * @param {string} memories - RAG memories to include in the prompt (empty string if disabled)
-   * @param {string} chatSystemPrompt - Pre-formatted system prompt for chat
-   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
-   * @returns {Promise<AsyncGenerator<string>>} Generator that yields chat response chunks
    */
   async processChatQuery(
     requestContext: RequestContext,
@@ -48,13 +43,6 @@ class QueryEngine {
 
   /**
    * Process a query with tools using the conductor generator
-   * @param {RequestContext} requestContext - The request context with chat history and question
-   * @param {FunctionTool[]} toolCalls - Available MCP tools for the AI to use
-   * @param {string} memories - RAG memories to include in the prompt (empty string if disabled)
-   * @param {string} chatSystemPrompt - Pre-formatted system prompt for chat
-   * @param {string} toolSystemPrompt - Pre-formatted system prompt for tool usage
-   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
-   * @returns {Promise<AsyncGenerator<string>>} Generator that yields conductor response chunks
    */
   async processToolsQuery(
     requestContext: RequestContext,
@@ -78,10 +66,6 @@ class QueryEngine {
 
   /**
    * Wrap a stream generator with cancellation check and error handling
-   * @param {AsyncGenerator<string>} stream - The source stream to wrap
-   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
-   * @returns {AsyncGenerator<string>} Wrapped stream with cancellation and error handling
-   * @private
    */
   private async *wrappedStream(
     stream: AsyncGenerator<string>,
@@ -104,10 +88,6 @@ class QueryEngine {
   /**
    * Main query method that routes to appropriate processing based on chat mode
    * Handles all shared logic: memory retrieval, datetime formatting, and prompt creation
-   * @param {RequestContext} requestContext - The request context with chat history and question
-   * @param {'CHAT' | 'CONTEXT_AWARE'} chatMode - Mode determining whether to use tools
-   * @param {CancellationToken} cancellationToken - Token for cancelling the operation
-   * @returns {Promise<AsyncGenerator<string>>} Generator that yields response chunks
    */
   async query(
     requestContext: RequestContext,

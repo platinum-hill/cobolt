@@ -440,7 +440,7 @@ function SettingsPanel({
         </div>
 
         <div className="about-section">
-          <p>Version 0.0.4</p>
+          <p>Version 0.0.6</p>
           <p>© 2025 Cobolt</p>
         </div>
       </div>

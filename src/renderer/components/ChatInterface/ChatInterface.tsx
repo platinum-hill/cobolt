@@ -400,7 +400,6 @@ function ChatInterface({
     setMessages,
     hasMessages,
     handleSendMessage,
-    handleResetChat,
   } = useMessages(currentChatId || '');
 
   // Combine both loading states
@@ -684,11 +683,9 @@ function ChatInterface({
         inputMessage={inputMessage}
         setInputMessage={setInputMessage}
         isLoading={isLoading}
-        hasMessages={hasMessages}
         textareaRef={textareaRef}
         handleSendMessage={handleSendMessage}
         handleCancelMessage={handleCancelMessage}
-        handleResetChat={handleResetChat}
       />
     </div>
   );

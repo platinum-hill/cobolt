@@ -20,32 +20,26 @@ export class ToolExecutionUtils {
   /**
    * Check if a model supports tool calling - fast capabilities-only check
    */
-  static async modelSupportsTools(modelName: string, requestContext?: RequestContext): Promise<boolean> {
+  static async modelSupportsTools(modelName: string, requestContext: RequestContext): Promise<boolean> {
     const startTime = Date.now();
     
-    if (requestContext) {
-      TraceLogger.trace(requestContext, 'model-supports-tools-check-start', modelName);
-    }
-
+    TraceLogger.trace(requestContext, 'model-supports-tools-check-start', modelName);
+    
     try {
       // Get model info and check capabilities field
       const ollama = getOllamaClient();
       const modelInfo = await (ollama as any).show({ name: modelName });
       
-      if (requestContext) {
-        TraceLogger.trace(requestContext, 'model-info-retrieved', 'success');
-        TraceLogger.trace(requestContext, 'model-capabilities', JSON.stringify((modelInfo as any).capabilities || []));
-        TraceLogger.trace(requestContext, 'model-families', JSON.stringify(modelInfo.details?.families || []));
-        TraceLogger.trace(requestContext, 'tool-support-check-duration-ms', Date.now() - startTime);
-      }
+      TraceLogger.trace(requestContext, 'model-info-retrieved', 'success');
+      TraceLogger.trace(requestContext, 'model-capabilities', JSON.stringify((modelInfo as any).capabilities || []));
+      TraceLogger.trace(requestContext, 'model-families', JSON.stringify(modelInfo.details?.families || []));
+      TraceLogger.trace(requestContext, 'tool-support-check-duration-ms', Date.now() - startTime);
 
       // Check if capabilities includes tools support
       const supportsTools = (modelInfo as any).capabilities?.includes('tools') || 
                            (modelInfo as any).capabilities?.includes('function_calling');
       
-      if (requestContext) {
-        TraceLogger.trace(requestContext, 'model-supports-tools-result', supportsTools.toString());
-      }
+      TraceLogger.trace(requestContext, 'model-supports-tools-result', supportsTools.toString());
       
       return supportsTools;
       
@@ -59,8 +53,6 @@ export class ToolExecutionUtils {
       return false; // assume no tools if we can't check
     }
   }
-
-  
   
   static createToolCallErrorInfo(toolName: string, toolArguments: string, errorMessage: string, duration_ms: number) {
     return {

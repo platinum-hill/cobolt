@@ -265,8 +265,8 @@
 .assistant-message::after {
   content: '';
   position: absolute;
-  right: 0.25rem; /* Closer to actual content edge */
-  bottom: 0.75rem; /* Fixed distance from bottom */
+  right: 0.25rem;
+  bottom: 0.75rem;
   width: 1rem;
   height: 1rem;
   border: 2px solid #7CA97E;
@@ -274,7 +274,7 @@
   border-top-color: transparent;
   animation: spin 1s linear infinite;
   opacity: 0;
-  z-index: 10; /* Ensure it's above content */
+  z-index: 10;
 }
 
 .assistant-message.loading::after {
@@ -801,17 +801,12 @@
   align-items: center;
   justify-content: space-between;
   color: rgba(143, 185, 150, 0.85);
-  /* Removed transitions for simpler styling */
   border-radius: 4px 4px 0 0;
   font-weight: 500;
   font-size: 0.875rem;
   letter-spacing: 0.025em;
   position: relative;
 }
-
-/* Removed gradient hover effects for clean appearance */
-
-/* Removed hover effects for consistency */
 
 .thinking-header:focus,
 .thinking-header:focus-visible {
@@ -846,8 +841,6 @@
   outline: none;
   box-shadow: none;
 }
-
-/* Removed active state effects for consistency */
 
 /* Update the emoji and arrow to be positioned correctly */
 .thinking-header .header-content {
@@ -888,7 +881,6 @@
   word-break: break-word;
   max-height: 300px;
   overflow-y: auto;
-  /* Removed transition for simpler styling */
   border-top: none;
 }
 

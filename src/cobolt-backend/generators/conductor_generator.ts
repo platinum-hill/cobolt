@@ -10,7 +10,8 @@ import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 export class ConductorGenerator {
   
   /**
-   * Creates conductor mode following exact pseudocode with active monitoring and stopping
+   * Create a generator for the conductor response
+   * This handles the entire conversation flow with tool calls and RAG retrieval
    */
   async *createConductorResponseGenerator(
     requestContext: RequestContext,
@@ -32,12 +33,11 @@ export class ConductorGenerator {
         }
         yield content;
       }
-      return; // DONE - exit completely
+      return;
     }
     
-    // ONLY if we support tools, do conductor logic
     const messages: Message[] = [
-      { role: 'system', content: toolPrompt }, // Use toolPrompt since we know tools are supported
+      { role: 'system', content: toolPrompt },
     ];
     
     if (memories) {
@@ -70,7 +70,6 @@ export class ConductorGenerator {
           break;
         }
         
-        // EXACT PSEUDOCODE IMPLEMENTATION
         switch (currentPhase) {
           case 1: { // Initial processing
             // inject_context(rag_retrieve("phase_1_thinking"))
@@ -130,7 +129,6 @@ export class ConductorGenerator {
               // continue_generating() + phase = 4
               currentPhase = 4;
             } else {
-              // Done - end of conversation
               conversationActive = false;
             }
             break;

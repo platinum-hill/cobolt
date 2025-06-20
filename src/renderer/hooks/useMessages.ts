@@ -65,7 +65,6 @@ const useMessages = (chatId: string) => {
       });
     });
 
-    // Cleanup function to remove the event listener
     return cleanup;
   }, []);
 

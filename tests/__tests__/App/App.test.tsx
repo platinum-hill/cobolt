@@ -2,6 +2,25 @@ import '@testing-library/jest-dom';
 import { render, act } from '@testing-library/react';
 import App from '../../../src/renderer/components/App/App';
 
+// Mock electron-log/renderer to prevent initialization errors
+jest.mock('electron-log/renderer', () => ({
+  info: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
+  debug: jest.fn(),
+  verbose: jest.fn(),
+  silly: jest.fn(),
+  __esModule: true,
+  default: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    verbose: jest.fn(),
+    silly: jest.fn(),
+  },
+}));
+
 // Mock the scrollIntoView method since it's not available in JSDOM
 beforeEach(() => {
   Element.prototype.scrollIntoView = jest.fn();

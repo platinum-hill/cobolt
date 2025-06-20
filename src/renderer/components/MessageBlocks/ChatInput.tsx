@@ -5,48 +5,31 @@ interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
   isLoading: boolean;
-  hasMessages: boolean;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   handleSendMessage: (e: React.FormEvent) => void;
   handleCancelMessage: () => void;
-  handleResetChat: () => void;
 }
 
 function ChatInput({
   inputMessage,
   setInputMessage,
   isLoading,
-  hasMessages,
   textareaRef,
   handleSendMessage,
   handleCancelMessage,
-  handleResetChat,
 }: ChatInputProps) {
   const hasText = inputMessage.trim().length > 0;
 
   return (
     <div className="input-section">
       <div className="input-wrapper">
-        {/* Top right close button - always visible when there are messages */}
-        {hasMessages && (
-          <button
-            type="button"
-            onClick={handleResetChat}
-            className="close-chat-button"
-            aria-label="Close chat"
-            disabled={isLoading}
-          >
-            ✕
-          </button>
-        )}
-
         <div className="input-container">
           <div className="input-row">
             <textarea
               ref={textareaRef}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="What's next?"
+              placeholder="What would you like to know?"
               className="message-input"
               disabled={isLoading}
               onKeyDown={(e) => {
