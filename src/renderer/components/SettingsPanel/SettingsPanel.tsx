@@ -32,6 +32,7 @@ function SettingsPanel({
   const [isOpen, setIsOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+
   const [availableModels, setAvailableModels] = useState<ModelResponse[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [isToolInfoOpen, setIsToolInfoOpen] = useState(false);
@@ -415,6 +416,7 @@ function SettingsPanel({
               />
             </div>
           </div>
+
           <div className="integrations-container">
             <div className="action-row">
               <button

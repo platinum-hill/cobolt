@@ -45,7 +45,7 @@ const useMessages = (chatId: string) => {
   }, [chatId]);
 
   useEffect(() => {
-    window.api.onMessage((content: string) => {
+    const cleanup = window.api.onMessage((content: string) => {
       setMessages((prev) => {
         const newMessages = [...prev];
         const lastMessage = newMessages[newMessages.length - 1];
@@ -64,6 +64,8 @@ const useMessages = (chatId: string) => {
         ];
       });
     });
+
+    return cleanup;
   }, []);
 
   // Create a new chat

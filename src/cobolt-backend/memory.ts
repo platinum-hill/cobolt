@@ -68,7 +68,14 @@ async function addToMemory(messages: Message[]): Promise<void> {
     if (!memoryEnabled) {
       return;
     }
-    await memory?.add(messages, {userId: "userid"});
+        
+    try {
+      const result = await memory?.add(messages, {userId: "userid"});
+      console.log('[Memory] SUCCESS memory.add() result:', result);
+    } catch (error) {
+      console.error('[Memory] Memory storage FAILED:', error);
+      throw error;
+    }
 }
 
 /**
@@ -128,4 +135,8 @@ if (require.main === module) {
   }
 }
 
-export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled };
+function isMemoryEnabled(): boolean {
+  return memoryEnabled;
+}
+
+export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled, isMemoryEnabled };

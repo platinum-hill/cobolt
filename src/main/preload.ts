@@ -14,6 +14,7 @@ const validChannels = {
     'get-messages',
     'get-memory-enabled',
     'set-memory-enabled',
+
     'get-recent-chats',
     'create-new-chat',
     'update-chat-title',
@@ -59,10 +60,16 @@ contextBridge.exposeInMainWorld('api', {
 
   // Message events
   onMessage: (callback: (message: string) => void) => {
-    ipcRenderer.on('message-response', (_, message) => callback(message));
+    const handler = (_: any, message: string) => callback(message);
+    ipcRenderer.on('message-response', handler);
+    // Return cleanup function
+    return () => ipcRenderer.removeListener('message-response', handler);
   },
   onMessageCancelled: (callback: (message: string) => void) => {
-    ipcRenderer.on('message-cancelled', (_, message) => callback(message));
+    const handler = (_: any, message: string) => callback(message);
+    ipcRenderer.on('message-cancelled', handler);
+    // Return cleanup function
+    return () => ipcRenderer.removeListener('message-cancelled', handler);
   },
 
   // Memory settings
