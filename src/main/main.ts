@@ -406,6 +406,17 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
       await persistentChatHistory.updateChatTitle(chatId, newTitle);
     }
 
+    // Load the chat history for this specific chat
+    chatHistory.clear();
+    const messages = await persistentChatHistory.getMessagesForChat(chatId);
+    messages.forEach((msg: any) => {
+      if (msg.role === 'user') {
+        chatHistory.addUserMessage(msg.content);
+      } else if (msg.role === 'assistant') {
+        chatHistory.addAssistantMessage(msg.content);
+      }
+    });
+
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
       chatHistory,
@@ -464,6 +475,16 @@ ipcMain.handle('get-memory-enabled', () => {
 ipcMain.handle('set-memory-enabled', (_, enabled: boolean) => {
   updateMemoryEnabled(enabled);
   log.info('Memory enabled set to: ', enabled);
+  return true;
+});
+
+ipcMain.handle('get-conductor-enabled', () => {
+  return appMetadata.getConductorEnabled();
+});
+
+ipcMain.handle('set-conductor-enabled', (_, enabled: boolean) => {
+  appMetadata.setConductorEnabled(enabled);
+  log.info('Conductor mode enabled set to: ', enabled);
   return true;
 });
 
