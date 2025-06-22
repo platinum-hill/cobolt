@@ -16,9 +16,6 @@ import { ConductorGenerator } from './generators/conductor_generator';
 class QueryEngine {
   private conductorGenerator: ConductorGenerator;
   
-  /**
-   * Initialize the query engine with required generators
-   */
   constructor() {
     this.conductorGenerator = new ConductorGenerator();
   }

@@ -229,10 +229,6 @@ const addToolCallContentBlock = (
   });
 };
 
-// Removed addRemainingToolCalls function - was creating duplicate tool calls
-
-// Removed complex deduplication logic - tool calls should only be created once
-
 // Sequential content parsing for inline tool rendering
 // messageId is used to create stable thinking block IDs that don't change on re-renders
 const processMessageContent = (content: string, messageId: string) => {
@@ -257,7 +253,7 @@ const processMessageContent = (content: string, messageId: string) => {
     if (event.type === 'tool_start') {
       const immediateToolCall = {
         name: event.name || 'Unknown Tool',
-        arguments: 'Loading...', // Placeholder
+        arguments: 'Loading...',
         result: 'Executing...',
         isExecuting: true,
         duration_ms: undefined,
@@ -358,12 +354,10 @@ const processMessageContent = (content: string, messageId: string) => {
     }
   });
 
-  // Removed addRemainingToolCalls - no more extra tool calls
-
   // Return properly ordered content blocks
   return {
     contentBlocks,
-    toolCalls: [], // Remove the complex merging - contentBlocks is what actually gets rendered
+    toolCalls: [],
     thinkingBlocks: contentBlocks
       .filter((block) => block.type === 'thinking')
       .map((block) => safeStringify(block.thinkingContent || '')),
@@ -413,7 +407,6 @@ function ChatInterface({
   const thinkingBlockRefs = useRef<{
     [blockId: string]: HTMLDivElement | null;
   }>({});
-  // Removed autoCollapseScheduled refs - simplified dropdown behavior
 
   // Separate function to adjust textarea height for reuse
   const adjustTextareaHeight = () => {

@@ -7,6 +7,36 @@ import { Message } from 'ollama';
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
 import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 
+const PHASE_STATES = {
+  INITIAL_PROCESSING: 1,
+  TOOL_EXECUTION_LOOP: 2,
+  END_CONVERSATION: -1
+} as const;
+
+type PhaseState = typeof PHASE_STATES[keyof typeof PHASE_STATES];
+
+interface PhaseContext {
+  conversationMessages: Message[];
+  toolCalls: FunctionTool[];
+  requestContext: RequestContext;
+  cancellationToken: CancellationToken;
+}
+
+interface StreamOptions {
+  model: string;
+  contextLength: number;
+  stopOnToolCall?: boolean;
+  stopOnThinking?: boolean;
+  description: string;
+}
+
+interface StreamResult {
+  content: string;
+  toolCalls: any[];
+  stopped: boolean;
+  stopReason?: string;
+}
+
 export class ConductorGenerator {
   
   /**
@@ -54,12 +84,29 @@ export class ConductorGenerator {
     
     try {
       const conversationMessages = [...messages];
-      let conversationActive = true;
-      let currentPhase = 1;
+      let currentPhase: PhaseState = PHASE_STATES.INITIAL_PROCESSING;
       let totalPhaseCount = 0;
       const MAX_PHASES = 50;
       
-      while (conversationActive && !cancellationToken.isCancelled && totalPhaseCount < MAX_PHASES) {
+      // Create phase context object
+      const phaseContext: PhaseContext = {
+        conversationMessages,
+        toolCalls,
+        requestContext,
+        cancellationToken
+      };
+      
+      // Define phase handlers - each returns the next phase to execute
+      const phaseHandlers = {
+        [PHASE_STATES.INITIAL_PROCESSING]: this.handleInitialProcessing.bind(this),
+        [PHASE_STATES.TOOL_EXECUTION_LOOP]: this.handleToolExecutionLoop.bind(this)
+      };
+      
+      // Main state machine loop
+      while (currentPhase !== PHASE_STATES.END_CONVERSATION && 
+             !cancellationToken.isCancelled && 
+             totalPhaseCount < MAX_PHASES) {
+        
         totalPhaseCount++;
         console.log(`\n[Conductor] CONDUCTOR MODE - Phase ${currentPhase} (Total: ${totalPhaseCount}/${MAX_PHASES})`);
         
@@ -70,87 +117,16 @@ export class ConductorGenerator {
           break;
         }
         
-        switch (currentPhase) {
-          case 1: { // Initial processing
-            // inject_context(rag_retrieve("phase_1_thinking"))
-            const thinkingContext = await this.ragRetrieve("phase_1_thinking");
-            conversationMessages.push({ role: 'system', content: thinkingContext });
-            
-            // continue_generating()
-            // await_block_completion() -> stop_generating() -> scrub_context() -> inject_context(rag_retrieve("phase_1_response")
-            yield* this.streamAndStopOnThinking(conversationMessages, toolCalls, cancellationToken);
-            
-            const responseContext = await this.ragRetrieve("phase_1_response");
-            conversationMessages.push({ role: 'system', content: responseContext });
-            
-            // continue_generating() + phase = 2
-            yield* this.streamUntilNaturalEnd(conversationMessages, toolCalls, cancellationToken);
-            currentPhase = 2;
-            break;
-          }
-          
-          case 2: { // Tool or End Decision
-            // await_block_completion() -> inject_context(rag_retrieve("phase_2_decision")
-            //yield* this.streamUntilNaturalEnd(conversationMessages, toolCalls, cancellationToken);
-            
-            const decisionContext = await this.ragRetrieve("phase_2_decision");
-            conversationMessages.push({ role: 'system', content: decisionContext });
-            
-            // continue_generating() + phase = 3
-            currentPhase = 3;
-            break;
-          }
-          
-          case 3: { // Post-tool execution
-            // await_any_block_completion() -> stop_generating() -> scrub_context()
-            // detect_tool_call_or_end_of_turn()
-            const result = yield* this.streamAndStopOnToolCall(conversationMessages, toolCalls, cancellationToken);
-            
-            if (result.toolCall) {
-              // Execute tools first
-              const toolExecutionGenerator = this.executeConductorTools(
-                result.toolCalls,
-                requestContext,
-                conversationMessages
-              );
-              
-              let toolGenResult;
-              do {
-                toolGenResult = await toolExecutionGenerator.next();
-                if (!toolGenResult.done && toolGenResult.value) {
-                  yield toolGenResult.value;
-                }
-              } while (!toolGenResult.done);
-              
-              // inject_context(rag_retrieve("phase_3_reflection")
-              const reflectionContext = await this.ragRetrieve("phase_3_reflection");
-              conversationMessages.push({ role: 'system', content: reflectionContext });
-              
-              // continue_generating() + phase = 4
-              currentPhase = 4;
-            } else {
-              conversationActive = false;
-            }
-            break;
-          }
-          
-          case 4: { // Next Action Decision
-            // await_block_completion() -> stop_generating() -> scrub_context() -> inject_context(rag_retrieve("phase_4_decision")
-            //yield* this.streamAndStopOnThinking(conversationMessages, toolCalls, cancellationToken);
-            
-            const decisionContext = await this.ragRetrieve("phase_4_decision");
-            conversationMessages.push({ role: 'system', content: decisionContext });
-            
-            // continue_generating() + phase = 3
-            //yield* this.streamUntilNaturalEnd(conversationMessages, toolCalls, cancellationToken);
-            currentPhase = 3;
-            break;
-          }
-          
-          default:
-            conversationActive = false;
-            break;
+        // Execute current phase and get next phase
+        const phaseHandler: (ctx: PhaseContext) => AsyncGenerator<string, PhaseState> =
+          phaseHandlers[currentPhase as keyof typeof phaseHandlers];
+        if (!phaseHandler) {
+          console.error(`[Conductor] Unknown phase: ${currentPhase}`);
+          break;
         }
+        
+        const nextPhase: PhaseState = yield* phaseHandler(phaseContext);
+        currentPhase = nextPhase;
       }
       
     } catch (error) {
@@ -162,36 +138,109 @@ export class ConductorGenerator {
   }
 
   /**
-   * RAG retrieval for phase-specific content - UPDATED per new pseudocode
+   * Phase 1: Initial processing - thinking and initial response
+   */
+  private async *handleInitialProcessing(context: PhaseContext): AsyncGenerator<string, PhaseState> {
+    try {
+      // Single system prompt that includes both thinking and response instructions
+      const combinedPrompt = await this.ragRetrieve("phase_1_combined");
+      context.conversationMessages.push({ role: 'system', content: combinedPrompt });
+      
+      // Single LLM call that does thinking AND response in one go
+      yield* this.streamUntilNaturalEnd(context.conversationMessages, context.toolCalls, context.cancellationToken);
+      
+      console.log('[Conductor] Initial processing complete, moving to tool execution loop');
+      return PHASE_STATES.TOOL_EXECUTION_LOOP;
+    } catch (error) {
+      console.error('[Conductor] Error in initial processing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Phase 2: Tool execution loop - handles tool decisions, calls, and reflections
+   */
+  private async *handleToolExecutionLoop(context: PhaseContext): AsyncGenerator<string, PhaseState> {
+    try {
+      // Add decision prompt and check for tool calls
+      const decisionContext = await this.ragRetrieve("phase_2_decision");
+      context.conversationMessages.push({ role: 'system', content: decisionContext });
+      
+      const result = yield* this.streamAndStopOnToolCall(
+        context.conversationMessages, 
+        context.toolCalls, 
+        context.cancellationToken
+      );
+      
+      if (result.toolCall) {
+        console.log(`[Conductor] Executing ${result.toolCalls.length} tool(s)`);
+        
+        // Execute tools
+        const toolExecutionGenerator = this.executeConductorTools(
+          result.toolCalls,
+          context.requestContext,
+          context.conversationMessages
+        );
+        
+        let toolGenResult;
+        do {
+          toolGenResult = await toolExecutionGenerator.next();
+          if (!toolGenResult.done && toolGenResult.value) {
+            yield toolGenResult.value;
+          }
+        } while (!toolGenResult.done);
+        
+        // Add reflection and decision prompts
+        const reflectionContext = await this.ragRetrieve("phase_3_reflection");
+        context.conversationMessages.push({ role: 'system', content: reflectionContext });
+        
+        const nextActionContext = await this.ragRetrieve("phase_4_decision");
+        context.conversationMessages.push({ role: 'system', content: nextActionContext });
+        
+        console.log('[Conductor] Tool execution complete, continuing loop');
+        return PHASE_STATES.TOOL_EXECUTION_LOOP;
+      } else {
+        console.log('[Conductor] No tools requested, ending conversation');
+        return PHASE_STATES.END_CONVERSATION;
+      }
+    } catch (error) {
+      console.error('[Conductor] Error in tool execution loop:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * RAG retrieval for phase-specific content
    */
   private async ragRetrieve(phaseKey: string): Promise<string> {
-    const phasePrompts = {
-      "phase_1_thinking":   "\nGive your thoughts on the user's query before responding.\n",
-      "phase_1_response":   "\nSpeak to the user.\n", 
-      "phase_2_decision":   "\nIf the user's query could be enhanced by using one of your functions, then use a single tool OR end the conversation turn with a brief message.\n",
-      "phase_3_reflection": "\nProvide thoughts about the tool call results before proceeding.\n",
-      "phase_4_decision":   "\nYou MUST choose ONE of the following options: Call another tool, OR end the conversation turn.\n"
-    
-      //"phase_1_thinking":   "\nYou MUST think through this query before responding. Start by putting the number 1 in your response like (1. -).\n",
-      //"phase_1_response":   "\nProvide an initial response to the user's query. Start by putting the number 1.1 in your response like (1.1. -).\n", 
-      //"phase_2_decision":   "\nYou must now choose: call a single tool OR end the conversation turn with a brief message. Start by putting the number 2 in your response like (2. -).\n",
-      //"phase_3_reflection": "\nYou must think about the tool call results before proceeding. Provide your thoughts inbetween <think> and </think> tags. Start by putting the number 3 in your response like (3. -).\n",
-      //"phase_4_decision":   "\nYou MUST choose ONE of the following options: Call another tool, OR end the conversation turn. Start by putting the number 4 in your response like (4. -).\n"
+    const phasePrompts: Record<string, string> = {
+      phase_1_combined: `
+        First, give your thoughts on the user's query, then speak to the user with your response.
+      `,
+      phase_2_decision: `
+        If the user's query could be enhanced by using one of your functions, then use a single tool OR end the conversation turn with a brief message.
+      `,
+      phase_3_reflection: `
+        Provide thoughts about the tool call results before proceeding.
+      `,
+      phase_4_decision: `
+        You MUST choose ONE of the following options: Call another tool, OR end the conversation turn.
+      `
     };
     
-    return phasePrompts[phaseKey as keyof typeof phasePrompts] || "";
+    return phasePrompts[phaseKey]?.trim() || "";
   }
 
   /**
-   * Stream and stop when we detect </think> - used for phases 1 and 4
+   * Common streaming logic with configurable stop conditions
    */
-  private async *streamAndStopOnThinking(
+  private async *streamWithStopCondition(
     conversationMessages: Message[],
     toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken
-  ): AsyncGenerator<string> {
+    cancellationToken: CancellationToken,
+    options: StreamOptions
+  ): AsyncGenerator<string, StreamResult> {
     
-    // Create abort controller for this specific request
     const abortController = new AbortController();
     cancellationToken.setAbortController(abortController);
     
@@ -207,201 +256,23 @@ export class ConductorGenerator {
       thinkingStartTime: null
     };
     
-    console.log(`[Conductor] Streaming until </think> detected...`);
+    console.log(`[Conductor] ${options.description}...`);
 
     try {
       const ollama = getOllamaClient();
       const response = await ollama.chat({
-        model: MODELS.CHAT_MODEL,
+        model: options.model,
         messages: conversationMessages,
         tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
         keep_alive: -1,
         options: {
-          num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
-        },
-        stream: true,
-        signal: abortController.signal  // Add abort signal
-      } as any);
-      
-      // Phase 1: Stream and detect stop conditions
-      for await (const part of response) {
-        // Check for user cancellation first
-        if (cancellationToken.isCancelled) {
-          console.log(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
-          break;
-        }
-        
-        if (part.message?.content) {
-          // Process thinking events
-          const thinkingEvents = ToolExecutionUtils.processThinkingInContent(part.message.content, thinkingState);
-          for (const thinkingEvent of thinkingEvents) {
-            yield thinkingEvent;
-          }
-          
-          content += part.message.content;
-          yield part.message.content;
-          
-          // DETECT stop condition but DON'T scrub yet
-          if (content.includes('</think>') && !shouldStop) {
-            shouldStop = true;
-            stopReason = 'think_block_complete';
-            console.log('[Conductor] DETECTED </think> - cancelling AI generation');
-            abortController.abort();
-            // Continue reading to drain any buffered content
-          }
-        }
-        
-        if (part.message?.tool_calls) {
-          toolCallsFound.push(...part.message.tool_calls);
-        }
-      }
-      
-    } catch (error) {
-      if ((error as any).name === 'AbortError') {
-        console.log(`[Conductor] AI generation cancelled successfully: ${stopReason}`);
-      } else {
-        console.error('[Conductor] Unexpected error during streaming:', error);
-        throw error;
-      }
-    }
-    
-    // Phase 2: AI is confirmed stopped, now scrub if needed
-    if (shouldStop && stopReason === 'think_block_complete' && content.includes('</think>')) {
-      console.log('[Conductor] AI confirmed stopped - performing content scrub');
-      const thinkEndIndex = content.indexOf('</think>') + '</think>'.length;
-      content = content.substring(0, thinkEndIndex);
-      console.log(`[Conductor] SCRUBBED TO: "${content}"`);
-    }
-    
-    // Phase 3: Add final message to conversation
-    conversationMessages.push({
-      role: 'assistant',
-      content: content,
-      tool_calls: toolCallsFound.length > 0 ? toolCallsFound : undefined
-    });
-  }
-  
-  /**
-   * Stream until natural end - used for phase 2
-   */
-  private async *streamUntilNaturalEnd(
-    conversationMessages: Message[],
-    toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken
-  ): AsyncGenerator<string> {
-    
-    // Create abort controller for this specific request
-    const abortController = new AbortController();
-    cancellationToken.setAbortController(abortController);
-    
-    let content = '';
-    const toolCallsFound: any[] = [];
-    
-    const thinkingState: ThinkingState = { 
-      isInThinkingBlock: false, 
-      thinkingContent: '',
-      currentThinkingId: null,
-      thinkingStartTime: null
-    };
-    
-    console.log(`[Conductor] Streaming until natural end...`);
-
-    try {
-      const ollama = getOllamaClient();
-      const response = await ollama.chat({
-        model: MODELS.CHAT_MODEL,
-        messages: conversationMessages,
-        tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-        keep_alive: -1,
-        options: {
-          num_ctx: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
-        },
-        stream: true,
-        signal: abortController.signal  // Add abort signal
-      } as any);
-      
-      for await (const part of response) {
-        // Check for user cancellation
-        if (cancellationToken.isCancelled) {
-          console.log(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
-          break;
-        }
-        
-        if (part.message?.content) {
-          const thinkingEvents = ToolExecutionUtils.processThinkingInContent(part.message.content, thinkingState);
-          for (const thinkingEvent of thinkingEvents) {
-            yield thinkingEvent;
-          }
-          
-          content += part.message.content;
-          yield part.message.content;
-        }
-        
-        if (part.message?.tool_calls) {
-          toolCallsFound.push(...part.message.tool_calls);
-        }
-      }
-      
-    } catch (error) {
-      if ((error as any).name === 'AbortError') {
-        console.log('[Conductor] AI generation cancelled successfully (natural end)');
-      } else {
-        console.error('[Conductor] Unexpected error during streaming:', error);
-        throw error;
-      }
-    }
-    
-    // Add complete message to conversation
-    conversationMessages.push({
-      role: 'assistant',
-      content: content,
-      tool_calls: toolCallsFound.length > 0 ? toolCallsFound : undefined
-    });
-  }
-  
-  /**
-   * Stream and stop when we detect tool call - used for phase 3
-   */
-  private async *streamAndStopOnToolCall(
-    conversationMessages: Message[],
-    toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken
-  ): AsyncGenerator<string, { toolCall: boolean; toolCalls: any[] }> {
-    
-    // Create abort controller for this specific request
-    const abortController = new AbortController();
-    cancellationToken.setAbortController(abortController);
-    
-    let content = '';
-    const toolCallsFound: any[] = [];
-    let shouldStop = false;
-    let stopReason = '';
-    
-    const thinkingState: ThinkingState = { 
-      isInThinkingBlock: false, 
-      thinkingContent: '',
-      currentThinkingId: null,
-      thinkingStartTime: null
-    };
-    
-    console.log(`[Conductor] Streaming until tool call or natural end...`);
-
-    try {
-      const ollama = getOllamaClient();
-      const response = await ollama.chat({
-        model: MODELS.TOOLS_MODEL,
-        messages: conversationMessages,
-        tools: toolCalls.map((toolCall) => toolCall.toolDefinition),
-        keep_alive: -1,
-        options: {
-          num_ctx: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
+          num_ctx: options.contextLength,
         },
         stream: true,
         signal: abortController.signal
       } as any);
       
       for await (const part of response) {
-        // Check for user cancellation first
         if (cancellationToken.isCancelled) {
           console.log(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
           break;
@@ -409,34 +280,53 @@ export class ConductorGenerator {
         
         if (part.message?.content) {
           const thinkingEvents = ToolExecutionUtils.processThinkingInContent(part.message.content, thinkingState);
-          for (const thinkingEvent of thinkingEvents) {
-            yield thinkingEvent;
+          
+          if (thinkingEvents.length > 0) {
+            for (const thinkingEvent of thinkingEvents) {
+              yield thinkingEvent;
+            }
+          } else {
+            yield part.message.content;
           }
           
           content += part.message.content;
-          yield part.message.content;
+          
+          // Check stop conditions
+          if (options.stopOnThinking && content.includes('</think>') && !shouldStop) {
+            shouldStop = true;
+            stopReason = 'thinking_complete';
+            console.log('[Conductor] DETECTED </think> - stopping generation');
+            abortController.abort();
+          }
         }
         
         if (part.message?.tool_calls && !shouldStop) {
-          shouldStop = true;
-          stopReason = 'tool_calls_detected';
-          console.log(`[Conductor] DETECTED TOOL CALL - cancelling AI generation`);
-          abortController.abort();
+          if (options.stopOnToolCall) {
+            shouldStop = true;
+            stopReason = 'tool_calls_detected';
+            console.log(`[Conductor] DETECTED TOOL CALL - stopping generation`);
+            abortController.abort();
+          }
           toolCallsFound.push(...part.message.tool_calls);
-          // Continue reading to drain remaining content
         }
       }
       
     } catch (error) {
       if ((error as any).name === 'AbortError') {
-        console.log(`[Conductor] AI generation cancelled successfully: ${stopReason}`);
+        console.log(`[Conductor] Generation stopped successfully: ${stopReason}`);
       } else {
         console.error('[Conductor] Unexpected error during streaming:', error);
         throw error;
       }
     }
     
-    // No content scrubbing needed for tool calls - just save what we got
+    // Handle content scrubbing for thinking
+    if (shouldStop && stopReason === 'thinking_complete' && content.includes('</think>')) {
+      const thinkEndIndex = content.indexOf('</think>') + '</think>'.length;
+      content = content.substring(0, thinkEndIndex);
+    }
+    
+    // Add message to conversation
     conversationMessages.push({
       role: 'assistant',
       content: content,
@@ -444,8 +334,48 @@ export class ConductorGenerator {
     });
     
     return {
-      toolCall: toolCallsFound.length > 0,
-      toolCalls: toolCallsFound
+      content,
+      toolCalls: toolCallsFound,
+      stopped: shouldStop,
+      stopReason
+    };
+  }
+  
+  /**
+   * Stream until natural end
+   */
+  private async *streamUntilNaturalEnd(
+    conversationMessages: Message[],
+    toolCalls: FunctionTool[],
+    cancellationToken: CancellationToken
+  ): AsyncGenerator<string> {
+    
+    yield* this.streamWithStopCondition(conversationMessages, toolCalls, cancellationToken, {
+      model: MODELS.CHAT_MODEL,
+      contextLength: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
+      description: "Streaming until natural end"
+    });
+  }
+  
+  /**
+   * Stream and stop when we detect tool call
+   */
+  private async *streamAndStopOnToolCall(
+    conversationMessages: Message[],
+    toolCalls: FunctionTool[],
+    cancellationToken: CancellationToken
+  ): AsyncGenerator<string, { toolCall: boolean; toolCalls: any[] }> {
+    
+    const result = yield* this.streamWithStopCondition(conversationMessages, toolCalls, cancellationToken, {
+      model: MODELS.TOOLS_MODEL,
+      contextLength: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
+      stopOnToolCall: true,
+      description: "Streaming until tool call or natural end"
+    });
+    
+    return {
+      toolCall: result.toolCalls.length > 0,
+      toolCalls: result.toolCalls
     };
   }
 
