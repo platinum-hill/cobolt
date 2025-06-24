@@ -1,3 +1,5 @@
+import log from 'electron-log/main';
+
 /**
  * Enhanced cancellation token for stopping asynchronous operations with HTTP request cancellation
  */
@@ -18,7 +20,7 @@ export class CancellationToken {
     // Actually abort HTTP requests
     if (this._abortController) {
       this._abortController.abort();
-      console.log(`[Cancellation] HTTP request aborted: ${reason || 'User cancelled'}`);
+      log.info(`[Cancellation] HTTP request aborted: ${reason || 'User cancelled'}`);
     }
   }
 

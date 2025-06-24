@@ -2,6 +2,7 @@ import * as readline from 'readline';
 import { queryEngineInstance } from './query_engine';
 import { RequestContext } from './logger';
 import  { ChatHistory } from './chat_history';
+import log from 'electron-log/main';
 
 async function main() {
     const rl = readline.createInterface({
@@ -9,9 +10,9 @@ async function main() {
       output: process.stdout,
     });
   
-    console.log("Chat with AI (type 'exit' to quit)");
-    console.log("Available modes: chat, contextaware");
-    console.log("Usage: /mode <mode> to switch modes (e.g. /mode contextaware)");
+    log.info("Chat with AI (type 'exit' to quit)");
+    log.info("Available modes: chat, contextaware");
+    log.info("Usage: /mode <mode> to switch modes (e.g. /mode contextaware)");
   
     const askQuestion = (): Promise<string> => {
       return new Promise((resolve) => {
@@ -29,7 +30,7 @@ async function main() {
         const userInput = await askQuestion();
   
         if (userInput.toLowerCase() === "exit") {
-          console.log("Goodbye!");
+          log.info("Goodbye!");
           rl.close();
           break;
         }
@@ -38,10 +39,10 @@ async function main() {
           const mode = userInput.slice(6).toUpperCase();
           if (['CHAT', 'CONTEXT_AWARE'].includes(mode)) {
             currentMode = mode as 'CHAT' | 'CONTEXT_AWARE';
-            console.log(`Switched to ${currentMode} mode`);
+            log.info(`Switched to ${currentMode} mode`);
             continue;
           } else {
-            console.log("Invalid mode. Available modes: chat, contextaware");
+            log.info("Invalid mode. Available modes: chat, contextaware");
             continue;
           }
         }
@@ -55,7 +56,7 @@ async function main() {
 
         chatHistory.addUserMessage(userInput);
 
-        console.log("AI: ");
+        log.info("AI: ");
         let response = "";
         const stream = await queryEngineInstance.query(requestContext, currentMode);
         
@@ -63,15 +64,14 @@ async function main() {
           process.stdout.write(chunk);
           response += chunk;
         }
-        console.log("\n");
+        log.info("\n");
         
         chatHistory.addAssistantMessage(response);
       }
     } catch (error) {
-      console.error("An error occurred:", error);
+      log.error("An error occurred:", error);
       rl.close();
     }
   }
 
-  main().catch(console.error);
-  
+  main().catch(log.error);

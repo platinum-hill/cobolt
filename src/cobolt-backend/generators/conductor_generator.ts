@@ -6,6 +6,7 @@ import { FunctionTool } from '../ollama_tools';
 import { Message } from 'ollama';
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
 import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
+import log from 'electron-log/main';
 
 const PHASE_STATES = {
   INITIAL_PROCESSING: 1,
@@ -108,11 +109,11 @@ export class ConductorGenerator {
              totalPhaseCount < MAX_PHASES) {
         
         totalPhaseCount++;
-        console.log(`\n[Conductor] CONDUCTOR MODE - Phase ${currentPhase} (Total: ${totalPhaseCount}/${MAX_PHASES})`);
+        log.info(`\n[Conductor] CONDUCTOR MODE - Phase ${currentPhase} (Total: ${totalPhaseCount}/${MAX_PHASES})`);
         
         // Check for max phase limit
         if (totalPhaseCount >= MAX_PHASES) {
-          console.log(`[Conductor] CONDUCTOR: Hit max phase limit (${MAX_PHASES}), ending conversation`);
+          log.info(`[Conductor] CONDUCTOR: Hit max phase limit (${MAX_PHASES}), ending conversation`);
           yield `\n\n[Conductor] **Note**: Conversation ended after ${MAX_PHASES} phases to prevent infinite loops.`;
           break;
         }
@@ -121,7 +122,7 @@ export class ConductorGenerator {
         const phaseHandler: (ctx: PhaseContext) => AsyncGenerator<string, PhaseState> =
           phaseHandlers[currentPhase as keyof typeof phaseHandlers];
         if (!phaseHandler) {
-          console.error(`[Conductor] Unknown phase: ${currentPhase}`);
+          log.error(`[Conductor] Unknown phase: ${currentPhase}`);
           break;
         }
         
@@ -130,8 +131,8 @@ export class ConductorGenerator {
       }
       
     } catch (error) {
-      console.error('[Conductor] CONDUCTOR ERROR:', error);
-      console.error('[Conductor] ERROR STACK:', error instanceof Error ? error.stack : 'No stack');
+      log.error('[Conductor] CONDUCTOR ERROR:', error);
+      log.error('[Conductor] ERROR STACK:', error instanceof Error ? error.stack : 'No stack');
       const errorMessage = error instanceof Error ? error.message : String(error);
       yield `\n[Conductor] Error in conductor mode: ${errorMessage}`;
     }
@@ -149,10 +150,10 @@ export class ConductorGenerator {
       // Single LLM call that does thinking AND response in one go
       yield* this.streamUntilNaturalEnd(context.conversationMessages, context.toolCalls, context.cancellationToken);
       
-      console.log('[Conductor] Initial processing complete, moving to tool execution loop');
+      log.info('[Conductor] Initial processing complete, moving to tool execution loop');
       return PHASE_STATES.TOOL_EXECUTION_LOOP;
     } catch (error) {
-      console.error('[Conductor] Error in initial processing:', error);
+      log.error('[Conductor] Error in initial processing:', error);
       throw error;
     }
   }
@@ -173,7 +174,7 @@ export class ConductorGenerator {
       );
       
       if (result.toolCall) {
-        console.log(`[Conductor] Executing ${result.toolCalls.length} tool(s)`);
+        log.info(`[Conductor] Executing ${result.toolCalls.length} tool(s)`);
         
         // Execute tools
         const toolExecutionGenerator = this.executeConductorTools(
@@ -197,14 +198,14 @@ export class ConductorGenerator {
         const nextActionContext = await this.ragRetrieve("phase_4_decision");
         context.conversationMessages.push({ role: 'system', content: nextActionContext });
         
-        console.log('[Conductor] Tool execution complete, continuing loop');
+        log.info('[Conductor] Tool execution complete, continuing loop');
         return PHASE_STATES.TOOL_EXECUTION_LOOP;
       } else {
-        console.log('[Conductor] No tools requested, ending conversation');
+        log.info('[Conductor] No tools requested, ending conversation');
         return PHASE_STATES.END_CONVERSATION;
       }
     } catch (error) {
-      console.error('[Conductor] Error in tool execution loop:', error);
+      log.error('[Conductor] Error in tool execution loop:', error);
       throw error;
     }
   }
@@ -256,7 +257,7 @@ export class ConductorGenerator {
       thinkingStartTime: null
     };
     
-    console.log(`[Conductor] ${options.description}...`);
+    log.info(`[Conductor] ${options.description}...`);
 
     try {
       const ollama = getOllamaClient();
@@ -274,7 +275,7 @@ export class ConductorGenerator {
       
       for await (const part of response) {
         if (cancellationToken.isCancelled) {
-          console.log(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
+          log.info(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
           break;
         }
         
@@ -295,7 +296,7 @@ export class ConductorGenerator {
           if (options.stopOnThinking && content.includes('</think>') && !shouldStop) {
             shouldStop = true;
             stopReason = 'thinking_complete';
-            console.log('[Conductor] DETECTED </think> - stopping generation');
+            log.info('[Conductor] DETECTED </think> - stopping generation');
             abortController.abort();
           }
         }
@@ -304,7 +305,7 @@ export class ConductorGenerator {
           if (options.stopOnToolCall) {
             shouldStop = true;
             stopReason = 'tool_calls_detected';
-            console.log(`[Conductor] DETECTED TOOL CALL - stopping generation`);
+            log.info(`[Conductor] DETECTED TOOL CALL - stopping generation`);
             abortController.abort();
           }
           toolCallsFound.push(...part.message.tool_calls);
@@ -313,9 +314,9 @@ export class ConductorGenerator {
       
     } catch (error) {
       if ((error as any).name === 'AbortError') {
-        console.log(`[Conductor] Generation stopped successfully: ${stopReason}`);
+        log.info(`[Conductor] Generation stopped successfully: ${stopReason}`);
       } else {
-        console.error('[Conductor] Unexpected error during streaming:', error);
+        log.error('[Conductor] Unexpected error during streaming:', error);
         throw error;
       }
     }
