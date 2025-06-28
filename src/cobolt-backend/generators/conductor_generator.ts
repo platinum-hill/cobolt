@@ -52,10 +52,10 @@ export class ConductorGenerator {
     memories: string,
     cancellationToken: CancellationToken = globalCancellationToken
   ): AsyncGenerator<string> {
-    // Check tool support first
-    const modelSupportsTools = await ToolExecutionUtils.modelSupportsTools(MODELS.CHAT_MODEL, requestContext);
+    // Check tool support first - use the tools model for consistency
+    const modelSupportsTools = await ToolExecutionUtils.modelSupportsTools(MODELS.TOOLS_MODEL, requestContext);
     
-    // If no tools, bail immediately to simple chat
+    // If no tools, fall back to simple chat but still with thinking processing
     if (!modelSupportsTools) {
       const simpleChatStream = simpleChatOllamaStream(requestContext, systemPrompt, memories);
       for await (const content of simpleChatStream) {
@@ -68,7 +68,7 @@ export class ConductorGenerator {
     }
     
     const messages: Message[] = [
-      { role: 'system', content: toolPrompt },
+      { role: 'system', content: toolPrompt + '\n\nIMPORTANT: Always use <think></think> tags to show your reasoning before taking any action or providing responses.' },
     ];
     
     if (memories) {
@@ -109,11 +109,11 @@ export class ConductorGenerator {
              totalPhaseCount < MAX_PHASES) {
         
         totalPhaseCount++;
-        log.info(`\n[Conductor] CONDUCTOR MODE - Phase ${currentPhase} (Total: ${totalPhaseCount}/${MAX_PHASES})`);
+        log.info(`[Conductor] Phase ${currentPhase} (${totalPhaseCount}/${MAX_PHASES})`);
         
         // Check for max phase limit
         if (totalPhaseCount >= MAX_PHASES) {
-          log.info(`[Conductor] CONDUCTOR: Hit max phase limit (${MAX_PHASES}), ending conversation`);
+          log.warn(`[Conductor] Hit max phase limit (${MAX_PHASES}), ending conversation`);
           yield `\n\n[Conductor] **Note**: Conversation ended after ${MAX_PHASES} phases to prevent infinite loops.`;
           break;
         }
@@ -150,7 +150,6 @@ export class ConductorGenerator {
       // Single LLM call that does thinking AND response in one go
       yield* this.streamUntilNaturalEnd(context.conversationMessages, context.toolCalls, context.cancellationToken);
       
-      log.info('[Conductor] Initial processing complete, moving to tool execution loop');
       return PHASE_STATES.TOOL_EXECUTION_LOOP;
     } catch (error) {
       log.error('[Conductor] Error in initial processing:', error);
@@ -174,8 +173,6 @@ export class ConductorGenerator {
       );
       
       if (result.toolCall) {
-        log.info(`[Conductor] Executing ${result.toolCalls.length} tool(s)`);
-        
         // Execute tools
         const toolExecutionGenerator = this.executeConductorTools(
           result.toolCalls,
@@ -192,16 +189,23 @@ export class ConductorGenerator {
         } while (!toolGenResult.done);
         
         // Add reflection and decision prompts
-        const reflectionContext = await this.ragRetrieve("phase_3_reflection");
+        const reflectionContext = await this.ragRetrieve("phase_3_reflection_and_decision");
         context.conversationMessages.push({ role: 'system', content: reflectionContext });
         
-        const nextActionContext = await this.ragRetrieve("phase_4_decision");
-        context.conversationMessages.push({ role: 'system', content: nextActionContext });
+        // Stream the reflection and decision phase to generate thinking blocks and next action
+        const reflectionResult = yield* this.streamAndStopOnToolCall(
+          context.conversationMessages,
+          context.toolCalls,
+          context.cancellationToken
+        );
         
-        log.info('[Conductor] Tool execution complete, continuing loop');
-        return PHASE_STATES.TOOL_EXECUTION_LOOP;
+        // If the reflection phase decides to call more tools, continue the loop
+        if (reflectionResult.toolCall) {
+          return PHASE_STATES.TOOL_EXECUTION_LOOP;
+        } else {
+          return PHASE_STATES.END_CONVERSATION;
+        }
       } else {
-        log.info('[Conductor] No tools requested, ending conversation');
         return PHASE_STATES.END_CONVERSATION;
       }
     } catch (error) {
@@ -216,16 +220,66 @@ export class ConductorGenerator {
   private async ragRetrieve(phaseKey: string): Promise<string> {
     const phasePrompts: Record<string, string> = {
       phase_1_combined: `
-        First, give your thoughts on the user's query, then speak to the user with your response.
+        You MUST start your response by thinking through the user's query. Wrap ALL your reasoning in <think></think> tags before providing your response.
+
+        MANDATORY FORMAT:
+        <think>
+        Let me analyze this user query step by step:
+        1. What is the user asking for?
+        2. What information do I need to provide a complete answer?
+        3. Do I have sufficient knowledge to answer directly?
+        4. What approach should I take to best help the user?
+        </think>
+
+        [Your response to the user here]
+
+        Remember: You MUST include the <think></think> section at the start of your response.
       `,
       phase_2_decision: `
-        If the user's query could be enhanced by using one of your functions, then use a single tool OR end the conversation turn with a brief message.
+        Based on the user's query and our conversation so far, determine if using tools would help provide a better response.
+        
+        You MUST start with your reasoning in <think></think> tags:
+        <think>
+        Let me analyze the available tools and determine which would be most helpful for this specific query:
+        1. What specific information or capability does the user need?
+        2. Which tools can provide that capability?
+        3. What are the pros/cons of each relevant tool?
+        4. What parameters should be used and why? Check tool definitions carefully for required parameters!
+        5. For GitHub tools, remember that 'owner' and 'repo' are usually separate required parameters (e.g., owner: "platinum-hill", repo: "cobolt")
+        6. Are there any risks or limitations to consider?
+        7. Do I have enough information to answer completely, or would tools help?
+        
+        Based on this analysis, I should either call a tool or provide a direct answer.
+        </think>
+        
+        Then either:
+        - Call a specific tool with ALL required parameters if it would enhance your response, OR
+        - Provide a complete answer if you have sufficient information
+        
+        IMPORTANT: When using GitHub tools, always provide 'owner' and 'repo' as separate parameters, not combined as "owner/repo".
       `,
-      phase_3_reflection: `
-        Provide thoughts about the tool call results before proceeding.
-      `,
-      phase_4_decision: `
-        You MUST choose ONE of the following options: Call another tool, OR end the conversation turn.
+      phase_3_reflection_and_decision: `
+        Analyze the tool call results and decide on the next action. You MUST start with comprehensive analysis in <think></think> tags:
+        
+        <think>
+        Let me analyze the tool results thoroughly:
+        1. What did the tool(s) accomplish? Were they successful?
+        2. If any tools failed due to parameter validation errors, what were the specific issues?
+        3. How do these results help answer the user's original question?
+        4. What information is still missing or unclear?
+        5. Did any tools fail? If so, what alternative approaches could work?
+        6. For failed GitHub tools, can I fix the parameters (e.g., separate owner/repo correctly)?
+        7. Should I use another tool to gather more information, or do I have enough to provide a complete answer?
+        8. If using another tool, which one and with what CORRECT parameters?
+        
+        Based on this analysis, I need to decide my next action.
+        </think>
+        
+        Based on your analysis, either:
+        - Call another tool with CORRECT parameters (especially for GitHub tools: owner and repo must be separate), OR 
+        - Provide your final response to the user if you have sufficient information
+        
+        Remember: GitHub repository references like "platinum-hill/cobolt" should be split into owner: "platinum-hill" and repo: "cobolt"
       `
     };
     
@@ -257,7 +311,7 @@ export class ConductorGenerator {
       thinkingStartTime: null
     };
     
-    log.info(`[Conductor] ${options.description}...`);
+    log.info(`[Conductor] ${options.description} - Starting with thinking state:`, thinkingState);
 
     try {
       const ollama = getOllamaClient();
@@ -275,28 +329,35 @@ export class ConductorGenerator {
       
       for await (const part of response) {
         if (cancellationToken.isCancelled) {
-          log.info(`[Conductor] User cancellation detected: ${cancellationToken.cancelReason}`);
           break;
         }
         
         if (part.message?.content) {
-          const thinkingEvents = ToolExecutionUtils.processThinkingInContent(part.message.content, thinkingState);
+          const partContent = part.message.content;
+          
+          // Debug: Check if thinking tags are present
+          if (partContent.includes('<think>') || partContent.includes('</think>')) {
+            log.info('[Conductor] Thinking content detected in part:', partContent.substring(0, 200) + '...');
+          }
+          
+          const thinkingEvents = ToolExecutionUtils.processThinkingInContent(partContent, thinkingState);
           
           if (thinkingEvents.length > 0) {
+            log.info(`[Conductor] Generated ${thinkingEvents.length} thinking events`);
             for (const thinkingEvent of thinkingEvents) {
               yield thinkingEvent;
             }
-          } else {
-            yield part.message.content;
           }
           
-          content += part.message.content;
+          // Always yield the actual content - the frontend will handle thinking block extraction
+          yield partContent;
+          
+          content += partContent;
           
           // Check stop conditions
           if (options.stopOnThinking && content.includes('</think>') && !shouldStop) {
             shouldStop = true;
             stopReason = 'thinking_complete';
-            log.info('[Conductor] DETECTED </think> - stopping generation');
             abortController.abort();
           }
         }
@@ -305,7 +366,6 @@ export class ConductorGenerator {
           if (options.stopOnToolCall) {
             shouldStop = true;
             stopReason = 'tool_calls_detected';
-            log.info(`[Conductor] DETECTED TOOL CALL - stopping generation`);
             abortController.abort();
           }
           toolCallsFound.push(...part.message.tool_calls);
@@ -314,7 +374,7 @@ export class ConductorGenerator {
       
     } catch (error) {
       if ((error as any).name === 'AbortError') {
-        log.info(`[Conductor] Generation stopped successfully: ${stopReason}`);
+        // Generation stopped successfully - no need to log this as it's expected
       } else {
         log.error('[Conductor] Unexpected error during streaming:', error);
         throw error;
@@ -333,6 +393,13 @@ export class ConductorGenerator {
       content: content,
       tool_calls: toolCallsFound.length > 0 ? toolCallsFound : undefined
     });
+    
+    // Debug: Log final content to see if thinking tags are present
+    if (content.includes('<think>') || content.includes('</think>')) {
+      log.info('[Conductor] Final content contains thinking tags. Length:', content.length);
+    } else {
+      log.info('[Conductor] Final content does NOT contain thinking tags. Content preview:', content.substring(0, 200) + '...');
+    }
     
     return {
       content,
@@ -381,7 +448,65 @@ export class ConductorGenerator {
   }
 
   /**
-   * Execute tools detected in conductor mode with visual UI markers
+   * Validate tool parameters and provide suggestions for improvement
+   */
+  private validateToolParameters(toolCall: any, availableTools: FunctionTool[]): { 
+    isValid: boolean; 
+    suggestions: string[]; 
+    tool?: FunctionTool;
+  } {
+    const toolName = toolCall.function.name;
+    const toolArgs = toolCall.function.arguments;
+    const suggestions: string[] = [];
+    
+    // Find the tool definition
+    const tool = availableTools.find(t => t.toolDefinition.function.name === toolName);
+    
+    if (!tool) {
+      return {
+        isValid: false,
+        suggestions: [
+          `Tool '${toolName}' not found`,
+          `Available tools: ${availableTools.map(t => t.toolDefinition.function.name).join(', ')}`,
+          'Consider checking the tool name spelling or using a different tool'
+        ]
+      };
+    }
+    
+    const schema = tool.toolDefinition.function.parameters;
+    
+    // Basic parameter validation
+    if (schema?.required) {
+      const missingRequired = schema.required.filter(param => !(param in toolArgs));
+      if (missingRequired.length > 0) {
+        suggestions.push(`Missing required parameters: ${missingRequired.join(', ')}`);
+      }
+    }
+    
+    // Check for empty or null required parameters
+    if (schema?.properties) {
+      Object.entries(toolArgs).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === '') {
+          suggestions.push(`Parameter '${key}' is empty - consider providing a meaningful value`);
+        }
+        
+        // Type-specific validations
+        const propSchema = (schema.properties as any)?.[key];
+        if (propSchema?.type === 'string' && typeof value === 'string' && value.length > 1000) {
+          suggestions.push(`Parameter '${key}' is very long (${value.length} chars) - consider if this is intentional`);
+        }
+      });
+    }
+    
+    return {
+      isValid: suggestions.length === 0,
+      suggestions,
+      tool
+    };
+  }
+
+  /**
+   * Execute tools detected in conductor mode with enhanced validation and analysis
    */
   private async *executeConductorTools(
     toolCalls: any[],
@@ -413,19 +538,52 @@ export class ConductorGenerator {
       yield ToolExecutionUtils.emitExecutionEvent({type: 'tool_start', id: displayToolId, name: toolName});
       
       try {
-        // Use existing tool execution logic
-        const result = await this.executeToolCall(toolCall, requestContext);
+        // Get available tools for validation
+        const { McpClient } = await import('../connectors/mcp_client');
+        const availableTools: FunctionTool[] = McpClient.toolCache;
+        
+        // Validate tool parameters
+        const validation = this.validateToolParameters(toolCall, availableTools);
+        if (!validation.isValid) {
+          const errorMessage = `Invalid tool parameters: ${validation.suggestions.join(' | ')}`;
+          log.warn('[Conductor] ' + errorMessage);
+          
+          // Add the validation error to conversation for learning
+          const validationErrorResult = {
+            toolName: toolCall.function.name,
+            content: errorMessage,
+            isError: true,
+            analysis: `Parameter validation failed. ${validation.suggestions.join(' ')}`
+          };
+          toolResults.push(validationErrorResult);
+          
+          conversationMessages.push({
+            role: 'tool',
+            content: `Tool ${toolCall.function.name} validation error: ${errorMessage}\n\nSuggestions: ${validation.suggestions.join(', ')}`
+          });
+          
+          const toolCallInfo = ToolExecutionUtils.createToolCallErrorInfo(toolName, toolArguments, errorMessage, Date.now() - toolStartTime);
+          yield ToolExecutionUtils.emitExecutionEvent({type: 'tool_complete', id: displayToolId, duration_ms: Date.now() - toolStartTime, isError: true});
+          yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+          continue;
+        }
+        
+        // Use enhanced tool execution logic with analysis
+        const result = await this.executeToolCallWithAnalysis(toolCall, requestContext);
         
         toolResults.push({
           toolName: toolCall.function.name,
           content: result.content,
-          isError: result.isError || false
+          isError: result.isError || false,
+          analysis: result.analysis
         });
         
-        // Add tool result to conversation
+        // Add tool result with analysis to conversation
+        const toolResultMessage = `Tool ${toolCall.function.name} result: ${result.content}`;
+        const analysisMessage = result.analysis ? `\n\nTool Analysis: ${result.analysis}` : '';
         conversationMessages.push({
           role: 'tool',
-          content: `Tool ${toolCall.function.name} result: ${result.content}`
+          content: toolResultMessage + analysisMessage
         });
         
         // Show completion
@@ -437,16 +595,18 @@ export class ConductorGenerator {
         
       } catch (error) {
         const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
+        const errorAnalysis = `Unexpected error during tool execution. Consider: 1) Retrying with different parameters, 2) Using alternative tools, 3) Checking if the requested operation is valid.`;
         const errorResult = {
           toolName: toolCall.function.name,
           content: errorMessage,
-          isError: true
+          isError: true,
+          analysis: errorAnalysis
         };
         toolResults.push(errorResult);
         
         conversationMessages.push({
           role: 'tool',
-          content: `Tool ${toolCall.function.name} error: ${errorResult.content}`
+          content: `Tool ${toolCall.function.name} error: ${errorResult.content}\n\nError Analysis: ${errorAnalysis}`
         });
         
         // Show error completion
@@ -459,6 +619,72 @@ export class ConductorGenerator {
     }
     
     return toolResults;
+  }
+
+  /**
+   * Execute a single tool call with enhanced error handling and result analysis
+   */
+  private async executeToolCallWithAnalysis(
+    toolCall: any,
+    requestContext: RequestContext
+  ): Promise<{ content: string; isError: boolean; analysis?: string }> {
+    
+    const toolName = toolCall.function.name;
+    const toolArgs = toolCall.function.arguments;
+    
+    // Find the tool in available tools
+    const { McpClient } = await import('../connectors/mcp_client');
+    const toolCalls: FunctionTool[] = McpClient.toolCache;
+    const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
+    
+    if (!tool || tool.type !== "mcp") {
+      return {
+        content: `Error: Tool '${toolName}' not found`,
+        isError: true,
+        analysis: `Tool lookup failed - '${toolName}' is not available in the current tool cache. Available tools: ${toolCalls.map(t => t.toolDefinition.function.name).join(', ')}`
+      };
+    }
+    
+    try {
+      // Log tool execution for debugging  
+      log.info(`[Conductor] Executing tool '${toolName}' with args:`, JSON.stringify(toolArgs, null, 2));
+      
+      // Execute tool using existing MCP function
+      const toolResponse = await tool.mcpFunction(requestContext, toolCall);
+      
+      let resultText = '';
+      let analysis = '';
+      
+      if (toolResponse.isError) {
+        resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
+        analysis = `Tool execution failed. Error details: ${resultText}. Tool was called with args: ${JSON.stringify(toolArgs)}. Consider: 1) Checking if parameters are valid, 2) Trying alternative tools, 3) Simplifying the request.`;
+        return { content: resultText, isError: true, analysis };
+      } else if (!toolResponse.content || toolResponse.content.length === 0) {
+        resultText = 'Tool executed successfully (no content returned)';
+        analysis = 'Tool completed successfully but returned no content. This might be expected for action tools, or could indicate the tool found no relevant results.';
+      } else {
+        resultText = toolResponse.content.map(item => 
+          item.type === "text" ? item.text as string : JSON.stringify(item)
+        ).join('');
+        
+        // Analyze result quality
+        const resultLength = resultText.length;
+        if (resultLength > 10000) {
+          analysis = 'Tool returned a large amount of data. Consider if this fully addresses the user query or if additional filtering/processing is needed.';
+        } else if (resultLength < 50) {
+          analysis = 'Tool returned a brief result. Verify this adequately addresses the user query or if additional tools might be needed for completeness.';
+        } else {
+          analysis = 'Tool returned a reasonable amount of data. Assess if this information sufficiently addresses the user query.';
+        }
+      }
+      
+      return { content: resultText, isError: false, analysis };
+      
+    } catch (error: any) {
+      const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
+      const analysis = `Unexpected error during tool execution: ${error.message}. Tool was called with args: ${JSON.stringify(toolArgs)}. Consider: 1) Retrying with different parameters, 2) Using alternative tools, 3) Checking if the requested operation is valid.`;
+      return { content: errorMessage, isError: true, analysis };
+    }
   }
 
   /**

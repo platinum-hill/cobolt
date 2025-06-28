@@ -4,6 +4,7 @@ import { addToMemory } from '../memory';
 import { RequestContext, TraceLogger } from '../logger';
 import { MODELS } from '../model_manager';
 import { getOllamaClient } from '../ollama_client';
+import { ToolExecutionUtils, ThinkingState } from './tool_execution_utils';
 
 const defaultTemperature = 1.0;
 const defaultTopK = 64;
@@ -51,9 +52,28 @@ export async function* simpleChatOllamaStream(
   });
   
   let fullResponse = '';
+  const thinkingState: ThinkingState = { 
+    isInThinkingBlock: false, 
+    thinkingContent: '',
+    currentThinkingId: null,
+    thinkingStartTime: null
+  };
+  
   for await (const part of response) {
-    fullResponse += part.message.content;
-    yield part.message.content;
+    const content = part.message.content || '';
+    fullResponse += content;
+    
+    // Process thinking events if they exist
+    const thinkingEvents = ToolExecutionUtils.processThinkingInContent(content, thinkingState);
+    
+    if (thinkingEvents.length > 0) {
+      for (const thinkingEvent of thinkingEvents) {
+        yield thinkingEvent;
+      }
+    }
+    
+    // Always yield the content regardless of thinking events
+    yield content;
   }
   
   requestContext.chatHistory.addUserMessage(requestContext.question);
