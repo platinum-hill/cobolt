@@ -220,7 +220,7 @@ export class ConductorGenerator {
   private async ragRetrieve(phaseKey: string): Promise<string> {
     const phasePrompts: Record<string, string> = {
       phase_1_combined: `
-        You MUST start your response by thinking through the user's query. Wrap ALL your reasoning in <think></think> tags before providing your response.
+        You MUST start your response by thinking through the user's query. Wrap ALL your reasoning in <think> </think> tags before providing your response.
 
         MANDATORY FORMAT:
         <think>
@@ -231,35 +231,29 @@ export class ConductorGenerator {
         4. What approach should I take to best help the user?
         </think>
 
+        <think>
         [Your response to the user here]
-
-        Remember: You MUST include the <think></think> section at the start of your response.
+        </think>
       `,
       phase_2_decision: `
         Based on the user's query and our conversation so far, determine if using tools would help provide a better response.
         
-        You MUST start with your reasoning in <think></think> tags:
-        <think>
         Let me analyze the available tools and determine which would be most helpful for this specific query:
         1. What specific information or capability does the user need?
         2. Which tools can provide that capability?
         3. What are the pros/cons of each relevant tool?
         4. What parameters should be used and why? Check tool definitions carefully for required parameters!
-        5. For GitHub tools, remember that 'owner' and 'repo' are usually separate required parameters (e.g., owner: "platinum-hill", repo: "cobolt")
-        6. Are there any risks or limitations to consider?
-        7. Do I have enough information to answer completely, or would tools help?
+        5. Are there any risks or limitations to consider?
+        6. Do I have enough information to answer completely, or would tools help?
         
         Based on this analysis, I should either call a tool or provide a direct answer.
-        </think>
         
         Then either:
         - Call a specific tool with ALL required parameters if it would enhance your response, OR
         - Provide a complete answer if you have sufficient information
-        
-        IMPORTANT: When using GitHub tools, always provide 'owner' and 'repo' as separate parameters, not combined as "owner/repo".
       `,
       phase_3_reflection_and_decision: `
-        Analyze the tool call results and decide on the next action. You MUST start with comprehensive analysis in <think></think> tags:
+        Analyze the tool call results and decide on the next action. You MUST start with comprehensive analysis in <think> </think> tags:
         
         <think>
         Let me analyze the tool results thoroughly:
@@ -268,7 +262,7 @@ export class ConductorGenerator {
         3. How do these results help answer the user's original question?
         4. What information is still missing or unclear?
         5. Did any tools fail? If so, what alternative approaches could work?
-        6. For failed GitHub tools, can I fix the parameters (e.g., separate owner/repo correctly)?
+        6. For failed tools, can I fix the parameters?
         7. Should I use another tool to gather more information, or do I have enough to provide a complete answer?
         8. If using another tool, which one and with what CORRECT parameters?
         
@@ -276,10 +270,8 @@ export class ConductorGenerator {
         </think>
         
         Based on your analysis, either:
-        - Call another tool with CORRECT parameters (especially for GitHub tools: owner and repo must be separate), OR 
+        - Call another tool with CORRECT parameters, OR 
         - Provide your final response to the user if you have sufficient information
-        
-        Remember: GitHub repository references like "platinum-hill/cobolt" should be split into owner: "platinum-hill" and repo: "cobolt"
       `
     };
     
@@ -335,11 +327,6 @@ export class ConductorGenerator {
         if (part.message?.content) {
           const partContent = part.message.content;
           
-          // Debug: Check if thinking tags are present
-          if (partContent.includes('<think>') || partContent.includes('</think>')) {
-            log.info('[Conductor] Thinking content detected in part:', partContent.substring(0, 200) + '...');
-          }
-          
           const thinkingEvents = ToolExecutionUtils.processThinkingInContent(partContent, thinkingState);
           
           if (thinkingEvents.length > 0) {
@@ -394,12 +381,7 @@ export class ConductorGenerator {
       tool_calls: toolCallsFound.length > 0 ? toolCallsFound : undefined
     });
     
-    // Debug: Log final content to see if thinking tags are present
-    if (content.includes('<think>') || content.includes('</think>')) {
-      log.info('[Conductor] Final content contains thinking tags. Length:', content.length);
-    } else {
-      log.info('[Conductor] Final content does NOT contain thinking tags. Content preview:', content.substring(0, 200) + '...');
-    }
+    log.info('[Conductor] Final content. Content:', content);
     
     return {
       content,
