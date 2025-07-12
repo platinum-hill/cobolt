@@ -1,4 +1,4 @@
-import { RequestContext } from '../logger';
+import { RequestContext, TraceLogger } from '../logger';
 import { getOllamaClient } from '../ollama_client';
 import { simpleChatOllamaStream } from "./simple_ollama_stream";
 import { MODELS } from '../model_manager';
@@ -8,13 +8,12 @@ import { CancellationToken, globalCancellationToken } from '../utils/cancellatio
 import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 import log from 'electron-log/main';
 
-const PHASE_STATES = {
-  INITIAL_PROCESSING: 1,
-  TOOL_EXECUTION_LOOP: 2,
-  END_CONVERSATION: -1
-} as const;
+enum PHASE_STATES  {
+  INITIAL_PROCESSING = 1,
+  TOOL_EXECUTION_LOOP = 2,
+  END_CONVERSATION = -1
+};
 
-type PhaseState = typeof PHASE_STATES[keyof typeof PHASE_STATES];
 
 interface PhaseContext {
   conversationMessages: Message[];
@@ -85,7 +84,7 @@ export class ConductorGenerator {
     
     try {
       const conversationMessages = [...messages];
-      let currentPhase: PhaseState = PHASE_STATES.INITIAL_PROCESSING;
+      let currentPhase: PHASE_STATES = PHASE_STATES.INITIAL_PROCESSING;
       let totalPhaseCount = 0;
       const MAX_PHASES = 50;
       
@@ -119,14 +118,14 @@ export class ConductorGenerator {
         }
         
         // Execute current phase and get next phase
-        const phaseHandler: (ctx: PhaseContext) => AsyncGenerator<string, PhaseState> =
-          phaseHandlers[currentPhase as keyof typeof phaseHandlers];
+        const phaseHandler: (ctx: PhaseContext) => AsyncGenerator<string, PHASE_STATES> =
+          phaseHandlers[currentPhase];
         if (!phaseHandler) {
           log.error(`[Conductor] Unknown phase: ${currentPhase}`);
           break;
         }
         
-        const nextPhase: PhaseState = yield* phaseHandler(phaseContext);
+        const nextPhase: PHASE_STATES = yield* phaseHandler(phaseContext);
         currentPhase = nextPhase;
       }
       
@@ -141,8 +140,9 @@ export class ConductorGenerator {
   /**
    * Phase 1: Initial processing - thinking and initial response
    */
-  private async *handleInitialProcessing(context: PhaseContext): AsyncGenerator<string, PhaseState> {
+  private async *handleInitialProcessing(context: PhaseContext): AsyncGenerator<string, PHASE_STATES> {
     try {
+      log.info('[Conductor] Starting initial processing phase');
       // Single system prompt that includes both thinking and response instructions
       const combinedPrompt = await this.ragRetrieve("phase_1_combined");
       context.conversationMessages.push({ role: 'system', content: combinedPrompt });
@@ -160,7 +160,7 @@ export class ConductorGenerator {
   /**
    * Phase 2: Tool execution loop - handles tool decisions, calls, and reflections
    */
-  private async *handleToolExecutionLoop(context: PhaseContext): AsyncGenerator<string, PhaseState> {
+  private async *handleToolExecutionLoop(context: PhaseContext): AsyncGenerator<string, PHASE_STATES> {
     try {
       // Add decision prompt and check for tool calls
       const decisionContext = await this.ragRetrieve("phase_2_decision");
@@ -171,7 +171,8 @@ export class ConductorGenerator {
         context.toolCalls, 
         context.cancellationToken
       );
-      
+
+      log.info('[Conductor] Tool execution loop result:', result);
       if (result.toolCall) {
         // Execute tools
         const toolExecutionGenerator = this.executeConductorTools(
@@ -193,6 +194,7 @@ export class ConductorGenerator {
         context.conversationMessages.push({ role: 'system', content: reflectionContext });
         
         // Stream the reflection and decision phase to generate thinking blocks and next action
+        log.info('[Conductor] Starting reflection and decision phase');
         const reflectionResult = yield* this.streamAndStopOnToolCall(
           context.conversationMessages,
           context.toolCalls,
@@ -332,11 +334,13 @@ export class ConductorGenerator {
           if (thinkingEvents.length > 0) {
             log.info(`[Conductor] Generated ${thinkingEvents.length} thinking events`);
             for (const thinkingEvent of thinkingEvents) {
+              log.info(`[Conductor] Thinking event: ${thinkingEvent}`);
               yield thinkingEvent;
             }
           }
           
           // Always yield the actual content - the frontend will handle thinking block extraction
+          log.info(`[Conductor] Streaming content part: ${partContent}`);
           yield partContent;
           
           content += partContent;
@@ -346,6 +350,7 @@ export class ConductorGenerator {
             shouldStop = true;
             stopReason = 'thinking_complete';
             abortController.abort();
+            log.info('[Conductor] Stopping due to thinking completion');
           }
         }
         
@@ -355,6 +360,8 @@ export class ConductorGenerator {
             stopReason = 'tool_calls_detected';
             abortController.abort();
           }
+          log.info('[Conductor] Stopping due to tool calls detected');
+          log.info('[Conductor] Tool calls found:', JSON.stringify(part.message.tool_calls));
           toolCallsFound.push(...part.message.tool_calls);
         }
       }
@@ -383,6 +390,7 @@ export class ConductorGenerator {
     
     log.info('[Conductor] Final content. Content:', content);
     
+    // NOTE: This stream result is not being used at all ?
     return {
       content,
       toolCalls: toolCallsFound,
