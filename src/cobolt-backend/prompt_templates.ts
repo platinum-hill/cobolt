@@ -97,6 +97,15 @@ function createChatPrompt(
 3. Helpful and practical
 4. Professional yet friendly
 
+When answering complex questions or when you need to reason through a problem step by step, you MUST wrap your reasoning in <think></think> tags. Here's the format:
+
+<think>
+Your internal reasoning, analysis, and thought process goes here.
+You can work through problems, consider different angles, and plan your response.
+</think>
+
+Then provide your final answer to the user outside the thinking tags.
+
 Current Date & Time: ${currentDateTime}.
 
 `;
@@ -125,6 +134,8 @@ function createRagPrompt(
   return `You are a helpful AI assistant. Use the following context${memories ? ' and memories' : ''} to answer the question.
 If you cannot find the answer in the context, summarize the context itself and end by saying "I cannot find the answer in the provided context."
 
+If you need to reason through the information or think about your approach, wrap your thoughts in <think></think> tags. The user will see your reasoning separately from your final answer.
+
 Current Date & Time: ${currentDateTime}.
 
 Context:
@@ -150,6 +161,9 @@ function createQueryWithToolsPrompt(
   currentDateTime: string): string {
   return `
     Your job is to determine the tools to be used to answer the query below. Only use the tools provided to you if you feel they are necessary. You can also use the user's memories to help determine the arguments for the tool calls.
+    
+    If you need to think through your approach or reasoning, wrap your thoughts in <think></think> tags. The user will see your reasoning separately from your final answer.
+    
     Current Date & Time: ${currentDateTime}
     `
 }
