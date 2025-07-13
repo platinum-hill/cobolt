@@ -123,36 +123,19 @@ export class ConductorGenerator {
    */
   private async *handleToolExecutionLoop(context: ConductorContext): AsyncGenerator<string, boolean> {
     try {
-      // PHASE 1: Force thinking and planning BEFORE allowing any tool calls
-      log.info('[Conductor] Starting Phase 1: Thinking and Planning (no tools allowed)');
-      const thinkingContext = await this.ragRetrieve("phase_1_combined");
-      context.conversationMessages.push({ role: 'system', content: thinkingContext });
+      // PHASE 1+2 COMBINED: Thinking, planning, and action in single LLM call
+      log.info('[Conductor] Starting Phase 1+2: Thinking, Planning, and Action (single call)');
+      const combinedContext = await this.ragRetrieve("phase_1_and_2_combined");
+      context.conversationMessages.push({ role: 'system', content: combinedContext });
       
-      // Stream ONLY the thinking phase - no tool calls allowed here
-      yield* this.streamWithStopCondition(
-        context.conversationMessages,
-        context.toolCalls,
-        context.cancellationToken,
-        {
-          model: MODELS.TOOLS_MODEL,
-          contextLength: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
-          stopOnThinking: true,  
-          description: "Phase 1: Thinking and Planning (thinking only)"
-        }
-      );
-      
-      // PHASE 2: Now allow tool calls based on the completed thinking
-      log.info('[Conductor] Starting Phase 2: Action/Tool Execution');
-      const decisionContext = await this.ragRetrieve("phase_2_decision");
-      context.conversationMessages.push({ role: 'system', content: decisionContext });
-      
+      // Single call that includes thinking and potential tool execution
       const result = yield* this.streamAndStopOnToolCall(
         context.conversationMessages, 
         context.toolCalls, 
         context.cancellationToken
       );
 
-      log.info('[Conductor] Phase 2 complete. Action result:', result);
+      log.info('[Conductor] Phase 1+2 complete. Result:', result);
       if (result.toolCall) {
         // Execute tools
         const toolExecutionGenerator = this.executeConductorTools(
@@ -203,8 +186,8 @@ export class ConductorGenerator {
    */
   private async ragRetrieve(phaseKey: string): Promise<string> {
     const phasePrompts: Record<string, string> = {
-      phase_1_combined: `
-        CRITICAL REQUIREMENT: You MUST start your response with structured thinking in <think></think> tags. NO exceptions.
+      phase_1_and_2_combined: `
+        CRITICAL REQUIREMENT: You MUST start your response with structured thinking in <think></think> tags, then take action based on your analysis. NO exceptions.
 
         <think>
         Step 1 - Understanding the Query:
@@ -233,16 +216,11 @@ export class ConductorGenerator {
         - If answering directly: what key points should I cover?
         </think>
 
-        After completing your thinking, you may proceed with your planned action in the next phase.
-      `,
-      phase_2_decision: `
-        Based on your completed thinking and analysis from the previous phase, now execute your planned action.
-
-        You should either:
+        Now execute your planned action - either:
         1. Call the specific tool you identified in your thinking with the correct parameters, OR
         2. Provide a complete direct answer if you determined that was the best approach
 
-        Remember to use the exact parameters you planned in your thinking phase. If calling a tool, ensure ALL required parameters are provided correctly.
+        Remember to use the exact parameters you planned in your thinking. If calling a tool, ensure ALL required parameters are provided correctly.
       `,
       phase_3_reflection_and_decision: `
         You MUST start with thorough analysis in <think></think> tags, then take action based on your analysis.
@@ -346,14 +324,6 @@ export class ConductorGenerator {
           yield partContent;
           
           content += partContent;
-          
-          // Check stop conditions
-          if (options.stopOnThinking && content.includes('</think>') && !shouldStop) {
-            shouldStop = true;
-            stopReason = 'thinking_complete';
-            abortController.abort();
-            log.info('[Conductor] Stopping due to thinking completion');
-          }
         }
         
         if (part.message?.tool_calls && !shouldStop) {
@@ -663,52 +633,6 @@ export class ConductorGenerator {
       const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
       const analysis = `Unexpected error during tool execution: ${error.message}. Tool was called with args: ${JSON.stringify(toolArgs)}. Consider: 1) Retrying with different parameters, 2) Using alternative tools, 3) Checking if the requested operation is valid.`;
       return { content: errorMessage, isError: true, analysis };
-    }
-  }
-
-  /**
-   * Execute a single tool call (simplified version for conductor mode)
-   */
-  private async executeToolCall(
-    toolCall: any,
-    requestContext: RequestContext
-  ): Promise<{ content: string; isError: boolean }> {
-    
-    const toolName = toolCall.function.name;
-    
-    // Find the tool in available tools
-    const { McpClient } = await import('../connectors/mcp_client');
-    const toolCalls: FunctionTool[] = McpClient.toolCache;
-    const tool = toolCalls.find((tool) => tool.toolDefinition.function.name === toolName);
-    
-    if (!tool || tool.type !== "mcp") {
-      return {
-        content: `Error: Tool '${toolName}' not found`,
-        isError: true
-      };
-    }
-    
-    try {
-      // Execute tool using existing MCP function
-      const toolResponse = await tool.mcpFunction(requestContext, toolCall);
-      
-      let resultText = '';
-      if (toolResponse.isError) {
-        resultText = toolResponse.content?.map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('') || 'Tool call failed';
-        return { content: resultText, isError: true };
-      } else if (!toolResponse.content || toolResponse.content.length === 0) {
-        resultText = 'Tool executed successfully (no content returned)';
-      } else {
-        resultText = toolResponse.content.map(item => 
-          item.type === "text" ? item.text as string : JSON.stringify(item)
-        ).join('');
-      }
-      
-      return { content: resultText, isError: false };
-      
-    } catch (error: any) {
-      const errorMessage = `Tool execution failed: ${error.message || String(error)}`;
-      return { content: errorMessage, isError: true };
     }
   }
 }
