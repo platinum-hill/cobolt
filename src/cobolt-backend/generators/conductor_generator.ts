@@ -61,7 +61,7 @@ export class ConductorGenerator {
     }
     
     const messages: Message[] = [
-      { role: 'system', content: toolPrompt + '\n\nIMPORTANT: Always use <think></think> tags to show your reasoning before taking any action or providing responses.' },
+      { role: 'system', content: toolPrompt + '\n\nCRITICAL: You MUST always use <think></think> tags to show your structured reasoning before taking any action or providing responses. This is mandatory - no action should be taken without first completing your thinking analysis.' },
     ];
     
     if (memories) {
@@ -123,10 +123,27 @@ export class ConductorGenerator {
    */
   private async *handleToolExecutionLoop(context: ConductorContext): AsyncGenerator<string, boolean> {
     try {
-      // Add both thinking and decision prompts since we're starting here
+      // PHASE 1: Force thinking and planning BEFORE allowing any tool calls
+      log.info('[Conductor] Starting Phase 1: Thinking and Planning (no tools allowed)');
       const thinkingContext = await this.ragRetrieve("phase_1_combined");
-      const decisionContext = await this.ragRetrieve("phase_2_decision");
       context.conversationMessages.push({ role: 'system', content: thinkingContext });
+      
+      // Stream ONLY the thinking phase - no tool calls allowed here
+      yield* this.streamWithStopCondition(
+        context.conversationMessages,
+        context.toolCalls,
+        context.cancellationToken,
+        {
+          model: MODELS.TOOLS_MODEL,
+          contextLength: MODELS.TOOLS_MODEL_CONTEXT_LENGTH,
+          stopOnThinking: true,  
+          description: "Phase 1: Thinking and Planning (thinking only)"
+        }
+      );
+      
+      // PHASE 2: Now allow tool calls based on the completed thinking
+      log.info('[Conductor] Starting Phase 2: Action/Tool Execution');
+      const decisionContext = await this.ragRetrieve("phase_2_decision");
       context.conversationMessages.push({ role: 'system', content: decisionContext });
       
       const result = yield* this.streamAndStopOnToolCall(
@@ -135,7 +152,7 @@ export class ConductorGenerator {
         context.cancellationToken
       );
 
-      log.info('[Conductor] Tool execution loop result:', result);
+      log.info('[Conductor] Phase 2 complete. Action result:', result);
       if (result.toolCall) {
         // Execute tools
         const toolExecutionGenerator = this.executeConductorTools(
@@ -152,17 +169,19 @@ export class ConductorGenerator {
           }
         } while (!toolGenResult.done);
         
-        // Add reflection and decision prompts
+        // PHASE 3: Reflection and decision for next action (single LLM call)
+        log.info('[Conductor] Starting Phase 3: Reflection and Next Decision');
         const reflectionContext = await this.ragRetrieve("phase_3_reflection_and_decision");
         context.conversationMessages.push({ role: 'system', content: reflectionContext });
         
         // Stream the reflection and decision phase to generate thinking blocks and next action
-        log.info('[Conductor] Starting reflection and decision phase');
         const reflectionResult = yield* this.streamAndStopOnToolCall(
           context.conversationMessages,
           context.toolCalls,
           context.cancellationToken
         );
+        
+        log.info('[Conductor] Phase 3 complete. Reflection result:', reflectionResult);
         
         // If the reflection phase decides to call more tools, continue the loop
         if (reflectionResult.toolCall) {
@@ -185,58 +204,78 @@ export class ConductorGenerator {
   private async ragRetrieve(phaseKey: string): Promise<string> {
     const phasePrompts: Record<string, string> = {
       phase_1_combined: `
-        You MUST start your response by thinking through the user's query. Wrap ALL your reasoning in <think> </think> tags before providing your response.
-
-        MANDATORY FORMAT:
-        <think>
-        Let me analyze this user query step by step:
-        1. What is the user asking for?
-        2. What information do I need to provide a complete answer?
-        3. Do I have sufficient knowledge to answer directly?
-        4. What approach should I take to best help the user?
-        </think>
+        CRITICAL REQUIREMENT: You MUST start your response with structured thinking in <think></think> tags. NO exceptions.
 
         <think>
-        [Your response to the user here]
+        Step 1 - Understanding the Query:
+        - What exactly is the user asking for?
+        - What are the key components of their request?
+        - Are there any ambiguities that need clarification?
+
+        Step 2 - Knowledge Assessment:
+        - Do I have sufficient knowledge to answer this directly?
+        - What information gaps exist, if any?
+        - What domain knowledge is required?
+
+        Step 3 - Approach Planning:
+        - What is the best approach to help the user?
+        - Should I provide a direct answer or use tools?
+        - What would be the most helpful response format?
+
+        Step 4 - Tool Evaluation (if applicable):
+        - Which tools could potentially help with this query?
+        - What are the pros and cons of each relevant tool?
+        - What parameters would each tool need?
+
+        Step 5 - Action Plan:
+        - Based on my analysis, what should I do next?
+        - If using tools: which specific tool with which parameters?
+        - If answering directly: what key points should I cover?
         </think>
+
+        After completing your thinking, you may proceed with your planned action in the next phase.
       `,
       phase_2_decision: `
-        Based on the user's query and our conversation so far, determine if using tools would help provide a better response.
-        
-        Let me analyze the available tools and determine which would be most helpful for this specific query:
-        1. What specific information or capability does the user need?
-        2. Which tools can provide that capability?
-        3. What are the pros/cons of each relevant tool?
-        4. What parameters should be used and why? Check tool definitions carefully for required parameters!
-        5. Are there any risks or limitations to consider?
-        6. Do I have enough information to answer completely, or would tools help?
-        
-        Based on this analysis, I should either call a tool or provide a direct answer.
-        
-        Then either:
-        - Call a specific tool with ALL required parameters if it would enhance your response, OR
-        - Provide a complete answer if you have sufficient information
+        Based on your completed thinking and analysis from the previous phase, now execute your planned action.
+
+        You should either:
+        1. Call the specific tool you identified in your thinking with the correct parameters, OR
+        2. Provide a complete direct answer if you determined that was the best approach
+
+        Remember to use the exact parameters you planned in your thinking phase. If calling a tool, ensure ALL required parameters are provided correctly.
       `,
       phase_3_reflection_and_decision: `
-        Analyze the tool call results and decide on the next action. You MUST start with comprehensive analysis in <think> </think> tags:
-        
+        You MUST start with thorough analysis in <think></think> tags, then take action based on your analysis.
+
         <think>
-        Let me analyze the tool results thoroughly:
-        1. What did the tool(s) accomplish? Were they successful?
-        2. If any tools failed due to parameter validation errors, what were the specific issues?
-        3. How do these results help answer the user's original question?
-        4. What information is still missing or unclear?
-        5. Did any tools fail? If so, what alternative approaches could work?
-        6. For failed tools, can I fix the parameters?
-        7. Should I use another tool to gather more information, or do I have enough to provide a complete answer?
-        8. If using another tool, which one and with what CORRECT parameters?
-        
-        Based on this analysis, I need to decide my next action.
+        Step 1 - Tool Result Analysis:
+        - What did the tool(s) accomplish? Were they successful?
+        - If any tools failed, what were the specific error messages and causes?
+        - How do these results relate to the user's original question?
+
+        Step 2 - Completeness Assessment:
+        - Does the current information fully answer the user's question?
+        - What information is still missing or unclear?
+        - Are there any follow-up questions the user might have?
+
+        Step 3 - Error Analysis (if applicable):
+        - Did any tools fail due to parameter issues? What were the exact problems?
+        - Can I fix the parameters and retry?
+        - Are there alternative tools that might work better?
+
+        Step 4 - Next Action Planning:
+        - Should I call another tool to gather more information?
+        - If so, which tool and with what CORRECTED parameters?
+        - Or do I have sufficient information to provide a final answer?
+        - What would be most helpful to the user at this point?
+
+        Step 5 - Decision:
+        - Based on my analysis, my next action should be: [clear decision]
         </think>
         
-        Based on your analysis, either:
-        - Call another tool with CORRECT parameters, OR 
-        - Provide your final response to the user if you have sufficient information
+        Now execute your decision - either:
+        - Call another tool with CORRECT parameters based on your analysis, OR 
+        - Provide your final comprehensive answer to the user if you have sufficient information
       `
     };
     
@@ -326,12 +365,15 @@ export class ConductorGenerator {
           log.info('[Conductor] Stopping due to tool calls detected');
           log.info('[Conductor] Tool calls found:', JSON.stringify(part.message.tool_calls));
           toolCallsFound.push(...part.message.tool_calls);
+        } else if (part.message?.tool_calls && options.stopOnThinking) {
+          log.info('[Conductor] Ignoring tool calls during thinking-only phase');
         }
       }
       
     } catch (error) {
       if ((error as any).name === 'AbortError') {
         // Generation stopped successfully - no need to log this as it's expected
+        log.info(`[Conductor] Stream stopped successfully: ${stopReason}`);
       } else {
         log.error('[Conductor] Unexpected error during streaming:', error);
         throw error;
@@ -342,6 +384,7 @@ export class ConductorGenerator {
     if (shouldStop && stopReason === 'thinking_complete' && content.includes('</think>')) {
       const thinkEndIndex = content.indexOf('</think>') + '</think>'.length;
       content = content.substring(0, thinkEndIndex);
+      log.info('[Conductor] Trimmed content to thinking completion');
     }
     
     // Add message to conversation
@@ -351,9 +394,8 @@ export class ConductorGenerator {
       tool_calls: toolCallsFound.length > 0 ? toolCallsFound : undefined
     });
     
-    log.info('[Conductor] Final content. Content:', content);
+    log.info(`[Conductor] Final result - Content length: ${content.length}, Tool calls: ${toolCallsFound.length}, Stopped: ${shouldStop}, Reason: ${stopReason}`);
     
-    // NOTE: This stream result is not being used at all ?
     return {
       content,
       toolCalls: toolCallsFound,
