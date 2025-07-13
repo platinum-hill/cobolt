@@ -8,14 +8,8 @@ import { CancellationToken, globalCancellationToken } from '../utils/cancellatio
 import { ThinkingState, ToolExecutionUtils } from './tool_execution_utils';
 import log from 'electron-log/main';
 
-enum PHASE_STATES  {
-  INITIAL_PROCESSING = 1,
-  TOOL_EXECUTION_LOOP = 2,
-  END_CONVERSATION = -1
-};
 
-
-interface PhaseContext {
+interface ConductorContext {
   conversationMessages: Message[];
   toolCalls: FunctionTool[];
   requestContext: RequestContext;
@@ -84,49 +78,35 @@ export class ConductorGenerator {
     
     try {
       const conversationMessages = [...messages];
-      let currentPhase: PHASE_STATES = PHASE_STATES.INITIAL_PROCESSING;
-      let totalPhaseCount = 0;
-      const MAX_PHASES = 50;
+      const MAX_ITERATIONS = 50;
+      let shouldContinue = true;
+      let iterationCount = 0;
       
-      // Create phase context object
-      const phaseContext: PhaseContext = {
+      // Create conductor context object
+      const conductorContext: ConductorContext = {
         conversationMessages,
         toolCalls,
         requestContext,
         cancellationToken
       };
       
-      // Define phase handlers - each returns the next phase to execute
-      const phaseHandlers = {
-        [PHASE_STATES.INITIAL_PROCESSING]: this.handleInitialProcessing.bind(this),
-        [PHASE_STATES.TOOL_EXECUTION_LOOP]: this.handleToolExecutionLoop.bind(this)
-      };
-      
-      // Main state machine loop
-      while (currentPhase !== PHASE_STATES.END_CONVERSATION && 
+      // Main execution loop
+      while (shouldContinue && 
              !cancellationToken.isCancelled && 
-             totalPhaseCount < MAX_PHASES) {
+             iterationCount < MAX_ITERATIONS) {
         
-        totalPhaseCount++;
-        log.info(`[Conductor] Phase ${currentPhase} (${totalPhaseCount}/${MAX_PHASES})`);
+        iterationCount++;
+        log.info(`[Conductor] Iteration ${iterationCount}/${MAX_ITERATIONS}`);
         
-        // Check for max phase limit
-        if (totalPhaseCount >= MAX_PHASES) {
-          log.warn(`[Conductor] Hit max phase limit (${MAX_PHASES}), ending conversation`);
-          yield `\n\n[Conductor] **Note**: Conversation ended after ${MAX_PHASES} phases to prevent infinite loops.`;
+        // Check for max iteration limit
+        if (iterationCount >= MAX_ITERATIONS) {
+          log.warn(`[Conductor] Hit max iteration limit (${MAX_ITERATIONS}), ending conversation`);
+          yield `\n\n[Conductor] **Note**: Conversation ended after ${MAX_ITERATIONS} iterations to prevent infinite loops.`;
           break;
         }
         
-        // Execute current phase and get next phase
-        const phaseHandler: (ctx: PhaseContext) => AsyncGenerator<string, PHASE_STATES> =
-          phaseHandlers[currentPhase];
-        if (!phaseHandler) {
-          log.error(`[Conductor] Unknown phase: ${currentPhase}`);
-          break;
-        }
-        
-        const nextPhase: PHASE_STATES = yield* phaseHandler(phaseContext);
-        currentPhase = nextPhase;
+        // Execute the tool execution handler
+        shouldContinue = yield* this.handleToolExecutionLoop(conductorContext);
       }
       
     } catch (error) {
@@ -138,32 +118,15 @@ export class ConductorGenerator {
   }
 
   /**
-   * Phase 1: Initial processing - thinking and initial response
+   * Tool execution loop - handles tool decisions, calls, and reflections
+   * Returns boolean indicating whether to continue the loop
    */
-  private async *handleInitialProcessing(context: PhaseContext): AsyncGenerator<string, PHASE_STATES> {
+  private async *handleToolExecutionLoop(context: ConductorContext): AsyncGenerator<string, boolean> {
     try {
-      log.info('[Conductor] Starting initial processing phase');
-      // Single system prompt that includes both thinking and response instructions
-      const combinedPrompt = await this.ragRetrieve("phase_1_combined");
-      context.conversationMessages.push({ role: 'system', content: combinedPrompt });
-      
-      // Single LLM call that does thinking AND response in one go
-      yield* this.streamUntilNaturalEnd(context.conversationMessages, context.toolCalls, context.cancellationToken);
-      
-      return PHASE_STATES.TOOL_EXECUTION_LOOP;
-    } catch (error) {
-      log.error('[Conductor] Error in initial processing:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Phase 2: Tool execution loop - handles tool decisions, calls, and reflections
-   */
-  private async *handleToolExecutionLoop(context: PhaseContext): AsyncGenerator<string, PHASE_STATES> {
-    try {
-      // Add decision prompt and check for tool calls
+      // Add both thinking and decision prompts since we're starting here
+      const thinkingContext = await this.ragRetrieve("phase_1_combined");
       const decisionContext = await this.ragRetrieve("phase_2_decision");
+      context.conversationMessages.push({ role: 'system', content: thinkingContext });
       context.conversationMessages.push({ role: 'system', content: decisionContext });
       
       const result = yield* this.streamAndStopOnToolCall(
@@ -203,12 +166,12 @@ export class ConductorGenerator {
         
         // If the reflection phase decides to call more tools, continue the loop
         if (reflectionResult.toolCall) {
-          return PHASE_STATES.TOOL_EXECUTION_LOOP;
+          return true; // Continue the loop
         } else {
-          return PHASE_STATES.END_CONVERSATION;
+          return false; // End the conversation
         }
       } else {
-        return PHASE_STATES.END_CONVERSATION;
+        return false; // End the conversation
       }
     } catch (error) {
       log.error('[Conductor] Error in tool execution loop:', error);
@@ -397,22 +360,6 @@ export class ConductorGenerator {
       stopped: shouldStop,
       stopReason
     };
-  }
-  
-  /**
-   * Stream until natural end
-   */
-  private async *streamUntilNaturalEnd(
-    conversationMessages: Message[],
-    toolCalls: FunctionTool[],
-    cancellationToken: CancellationToken
-  ): AsyncGenerator<string> {
-    
-    yield* this.streamWithStopCondition(conversationMessages, toolCalls, cancellationToken, {
-      model: MODELS.CHAT_MODEL,
-      contextLength: MODELS.CHAT_MODEL_CONTEXT_LENGTH,
-      description: "Streaming until natural end"
-    });
   }
   
   /**
