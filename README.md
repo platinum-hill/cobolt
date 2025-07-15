@@ -74,6 +74,9 @@ Install-Module -Name Microsoft.WinGet.Client -Repository PSGallery -Confirm:$fal
 
 You can confirm winget is present using powershell with `winget -v`
 
+Code signing policy:
+* Free code signing on Windows provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org) (thank you for your support!).
+
 ## How to?
 
 ### How to change the model?
