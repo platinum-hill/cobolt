@@ -3,6 +3,7 @@ import appMetadata from "./data_models/app_metadata";
 import { MODELS } from "./model_manager";
 import { app } from "electron";
 import path from "path";
+import log from 'electron-log/main';
 
 const appDataPath = app.getPath('userData');
 
@@ -68,7 +69,14 @@ async function addToMemory(messages: Message[]): Promise<void> {
     if (!memoryEnabled) {
       return;
     }
-    await memory?.add(messages, {userId: "userid"});
+        
+    try {
+      const result = await memory?.add(messages, {userId: "userid"});
+      log.info('[Memory] SUCCESS memory.add() result:', result);
+    } catch (error) {
+      log.error('[Memory] Memory storage FAILED:', error);
+      throw error;
+    }
 }
 
 /**
@@ -111,21 +119,25 @@ if (require.main === module) {
     (async () => {
       try {
         const memories = await listMemories();
-        console.log(memories);
+        log.info(memories);
       } catch (error) {
-        console.error('Error listing memories:', error);
+        log.error('Error listing memories:', error);
       }
     })();
   } else if (command === 'clearMemory') {
     (async () => {
       try {
         await clearMemory();
-        console.log('Memory cleared successfully');
+        log.info('Memory cleared successfully');
       } catch (error) {
-        console.error('Error clearing memory:', error);
+        log.error('Error clearing memory:', error);
       }
     })();
   }
 }
 
-export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled };
+function isMemoryEnabled(): boolean {
+  return memoryEnabled;
+}
+
+export { addToMemory, searchMemories, clearMemory, listMemories, updateMemoryEnabled, isMemoryEnabled };
