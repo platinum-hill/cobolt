@@ -1,4 +1,4 @@
-import { RequestContext, TraceLogger } from '../logger';
+import { RequestContext } from '../logger';
 import { getOllamaClient } from '../ollama_client';
 import { simpleChatOllamaStream } from "./simple_ollama_stream";
 import { MODELS } from '../model_manager';

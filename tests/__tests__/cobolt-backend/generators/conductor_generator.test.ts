@@ -510,10 +510,7 @@ describe('ConductorGenerator', () => {
       const mockChatResponse = async function* namedMockChatResponse() {
         callCount += 1;
         if (callCount === 1) {
-          // Phase 1: Initial processing
-          yield { message: { content: 'I need to call a tool' } };
-        } else if (callCount === 2) {
-          // Phase 2: Tool execution loop - returns tool call
+          // Phase 1: Thinking and tool execution loop - returns tool call
           yield {
             message: {
               content: 'Calling tool',
@@ -572,10 +569,7 @@ describe('ConductorGenerator', () => {
       const mockChatResponse = async function* namedMockChatResponse() {
         callCount += 1;
         if (callCount === 1) {
-          // Phase 1: Initial processing
-          yield { message: { content: 'I need to call a tool' } };
-        } else if (callCount === 2) {
-          // Phase 2: Tool execution loop - returns tool call
+          // Phase 1: Thinking and tool execution loop - returns tool call
           yield {
             message: {
               content: 'Calling tool',
@@ -631,10 +625,7 @@ describe('ConductorGenerator', () => {
       const mockChatResponse = async function* namedMockChatResponse() {
         callCount += 1;
         if (callCount === 1) {
-          // Phase 1: Initial processing
-          yield { message: { content: 'I need to call a tool' } };
-        } else if (callCount === 2) {
-          // Phase 2: Tool execution loop - returns tool call
+          // Phase 1: Thinking and tool execution loop - returns tool call
           yield {
             message: {
               content: 'Calling tool',
