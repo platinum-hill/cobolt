@@ -15,14 +15,34 @@ interface FunctionMcpToolCallWrapper {
     @param function: A function wrapper that uses tool call information from ollama and executes the function
     @param toolDefinition: Ollama Tool definition
 */
+
+// Definining a new interface for MCP tool definitions. The Ollama API tools defnition has everything as optionl. We don't want to handle that again because we already do that when we fetch Mcp too list
+interface McpToolDefinition {
+    type: "function",
+    function: {
+        name: string,
+        description: string,
+        parameters: {
+            type: string,
+            required: string[],
+            properties: Record<string, {
+                type: string | string [],
+                items?: any,
+                description: string,
+                enum?: string[]
+            }>;
+        };
+    };
+}
+
 interface McpTool {
     type: "mcp",
     server: string,
     mcpFunction: FunctionMcpToolCallWrapper,
-    toolDefinition: Tool
+    toolDefinition: McpToolDefinition
 }
 
 // Define FunctionTool as a union of the two specific types
 type FunctionTool = McpTool;
 
-export { FunctionMcpToolCallWrapper, FunctionTool, McpTool }
+export { FunctionMcpToolCallWrapper, FunctionTool, McpTool, McpToolDefinition };

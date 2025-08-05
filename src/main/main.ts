@@ -17,6 +17,7 @@ import { resolveHtmlPath } from './util';
 import { queryEngineInstance } from '../cobolt-backend/query_engine';
 import { RequestContext } from '../cobolt-backend/logger';
 import { initDependencies } from '../cobolt-backend/init';
+import dotenv from "dotenv";
 import {
   ChatHistory,
   PersistentChatHistory,
@@ -59,6 +60,11 @@ if (isDebug) {
     .then((electronDebug) => electronDebug.default())
     .catch(() => log.debug('error importing electron-debug'));
 }
+
+// Load environment variables from .env file
+//TODO: Load different .env configuration based on environment
+dotenv.config();
+log.info(JSON.stringify(process.env, null, 2));
 
 const RESOURCES_PATH = app.isPackaged
   ? path.join(process.resourcesPath, 'assets')
@@ -430,7 +436,7 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
 
     const stream = await queryEngineInstance.query(
       requestContext,
-      'CONTEXT_AWARE',
+      'ONLINE',
       globalCancellationToken,
     );
 

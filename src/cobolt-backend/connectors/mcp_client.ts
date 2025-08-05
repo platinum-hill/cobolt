@@ -1,6 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio";
-import dotenv from "dotenv";
 import log from "electron-log/main";
 import { MCPServer, mcpServers } from "./mcp_tools";
 import { RequestContext, TraceLogger } from "../logger";
@@ -9,9 +8,6 @@ import { McpTool } from "../ollama_tools";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types";
 import { CancellationToken, globalCancellationToken } from '../utils/cancellation';
 import { errorManager, ErrorCategory } from '../utils/error_manager';
-
-// Load environment variables from .env file
-dotenv.config();
 
 class MCPClient {
     private clients: Client[];

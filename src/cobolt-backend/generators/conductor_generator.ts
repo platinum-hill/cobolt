@@ -37,6 +37,7 @@ export class ConductorGenerator {
    * Create a generator for the conductor response
    * This handles the entire conversation flow with tool calls and RAG retrieval
    */
+  // TODO: **IMPORTANT** does not look like that the conversation messages are being added into the chat history. Double check this
   async *createConductorResponseGenerator(
     requestContext: RequestContext,
     systemPrompt: string,

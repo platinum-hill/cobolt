@@ -7,6 +7,7 @@ import { FunctionTool } from './ollama_tools';
 import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 import { ConductorGenerator } from './generators/conductor_generator';
+import { OnlineGenerator } from './generators/online_generator';
 
 /**
  * Main query engine that handles AI chat requests and tool usage
@@ -15,9 +16,11 @@ import { ConductorGenerator } from './generators/conductor_generator';
  */
 class QueryEngine {
   private conductorGenerator: ConductorGenerator;
+  private onlineGenerator: OnlineGenerator;
   
   constructor() {
     this.conductorGenerator = new ConductorGenerator();
+    this.onlineGenerator = new OnlineGenerator();
   }
 
   /**
@@ -34,6 +37,26 @@ class QueryEngine {
 
     return this.wrappedStream(
       simpleChatOllamaStream(requestContext, chatSystemPrompt, memories),
+      cancellationToken
+    );
+  }
+
+  /**
+   * Process an online query using ai-sdk with tool calling
+   */
+  async processOnlineQuery(
+    requestContext: RequestContext,
+    memories: string,
+    chatSystemPrompt: string,
+    cancellationToken: CancellationToken = globalCancellationToken
+  ): Promise<AsyncGenerator<string>> {
+    TraceLogger.trace(requestContext, 'online_relevant_memories', memories);
+    TraceLogger.trace(requestContext, 'processOnlineQuery', chatSystemPrompt);
+
+    return this.onlineGenerator.createOnlineResponseGenerator(
+      requestContext,
+      chatSystemPrompt,
+      memories,
       cancellationToken
     );
   }
@@ -88,7 +111,7 @@ class QueryEngine {
    */
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' = 'CHAT',
+    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'ONLINE' = 'CHAT',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());
@@ -104,6 +127,10 @@ class QueryEngine {
       const toolCalls: FunctionTool[] = McpClient.toolCache;
       const toolSystemPrompt = createQueryWithToolsPrompt(formattedDateTime);
       return this.processToolsQuery(requestContext, toolCalls, memories, chatSystemPrompt, toolSystemPrompt, cancellationToken);
+    }
+
+    if (chatMode === 'ONLINE') {
+      return this.processOnlineQuery(requestContext, memories, chatSystemPrompt, cancellationToken);
     }
 
     return this.processChatQuery(requestContext, memories, chatSystemPrompt, cancellationToken);
