@@ -1,5 +1,5 @@
 // Library of custom tool call definitions for the Ollama API
-import { Tool, ToolCall } from "ollama";
+import { ToolCall } from "ollama";
 import { RequestContext } from "./logger";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types";
 import { CancellationToken } from "./utils/cancellation";

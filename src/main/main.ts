@@ -12,12 +12,12 @@ import path from 'path';
 import { app, BrowserWindow, shell, ipcMain, dialog } from 'electron';
 import log from 'electron-log/main';
 import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import { queryEngineInstance } from '../cobolt-backend/query_engine';
 import { RequestContext } from '../cobolt-backend/logger';
 import { initDependencies } from '../cobolt-backend/init';
-import dotenv from "dotenv";
 import {
   ChatHistory,
   PersistentChatHistory,
@@ -62,7 +62,7 @@ if (isDebug) {
 }
 
 // Load environment variables from .env file
-//TODO: Load different .env configuration based on environment
+// TODO: Load different .env configuration based on environment
 dotenv.config();
 log.info(JSON.stringify(process.env, null, 2));
 

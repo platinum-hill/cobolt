@@ -9,7 +9,7 @@ export function zodSchemaToString(schema: ZodTypeAny): string {
   if (schema instanceof z.ZodObject) {
     const shape = schema.shape;
     const fields = Object.entries(shape).map(([k, v]) => {
-      let propStr = zodSchemaToString(v as ZodTypeAny);
+      const propStr = zodSchemaToString(v as ZodTypeAny);
       return `${k}: ${propStr}`;
     });
     return `z.object({\n  ${fields.join(",\n  ")}\n})`;

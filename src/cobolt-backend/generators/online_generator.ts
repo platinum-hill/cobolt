@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { McpClient } from '../connectors/mcp_client';
 import { McpToolDefinition } from '../ollama_tools';
 import log from 'electron-log/main';
-import { zodSchemaToString } from '../utils/debug_utils';
+import { ToolExecutionUtils } from './tool_execution_utils';
 
 /**
  * Online generator that uses ai-sdk for tool calling
@@ -30,7 +30,6 @@ export class OnlineGenerator {
       const zodSchema = this.convertMcpParametersToZod(McptoolDefinition);
 
       // Create a properly typed tool definition
-      // @ts-ignore
       const toolDefinition = tool({
         description: mcpTool.toolDefinition.function.description,
         inputSchema: zodSchema,
@@ -144,6 +143,145 @@ export class OnlineGenerator {
   }
   
   /**
+   * Handle different stream chunk types and emit appropriate events
+   */
+  private async *handleStreamChunks(
+    fullStream: AsyncIterable<any>,
+    toolExecutionTimes: Map<string, number>,
+    cancellationToken: CancellationToken
+  ): AsyncGenerator<string> {
+    for await (const chunk of fullStream) {
+      if (cancellationToken.isCancelled) {
+        log.info('[OnlineGenerator] Generation cancelled');
+        return;
+      }
+      
+      if (chunk.type === 'text-delta') {
+        yield chunk.text;
+      } else if (chunk.type === 'tool-call') {
+        log.info(`[OnlineGenerator] Tool call: ${chunk.toolName} with id: ${chunk.toolCallId}`);
+        
+        // Create unique tool ID using tool call ID from ai-sdk
+        const toolName = chunk.toolName;
+        const toolArguments = JSON.stringify(chunk.input, null, 2);
+        const displayToolId = `tool-${chunk.toolCallId}`;
+        
+        // Track start time for this tool execution
+        toolExecutionTimes.set(chunk.toolCallId, Date.now());
+        
+        // Show tool call position marker
+        yield `<tool_call_position id="${displayToolId}">`;
+        
+        // Show tool execution starting  
+        yield `<tool_calls_update>${JSON.stringify([{
+          name: toolName,
+          arguments: toolArguments,
+          result: 'Executing...',
+          isExecuting: true
+        }])}</tool_calls_update>`;
+        
+        // Emit tool start event
+        yield ToolExecutionUtils.emitExecutionEvent({
+          type: 'tool_start', 
+          id: displayToolId, 
+          name: toolName
+        });
+        
+      } else if (chunk.type === 'tool-result') {
+        log.info(`[OnlineGenerator] Tool result for: ${chunk.toolName} with id: ${chunk.toolCallId}`);
+        
+        const toolName = chunk.toolName;
+        const toolArguments = JSON.stringify(chunk.input, null, 2);
+        const displayToolId = `tool-${chunk.toolCallId}`;
+        
+        // In ai-sdk, tool-result chunks have the result in the 'output' property
+        const result = typeof chunk.output === 'string' ? chunk.output : JSON.stringify(chunk.output);
+        const isError = false; // ai-sdk tool-result chunks represent successful results
+        
+        // Calculate duration
+        const startTime = toolExecutionTimes.get(chunk.toolCallId) || Date.now();
+        const duration_ms = Date.now() - startTime;
+        toolExecutionTimes.delete(chunk.toolCallId); // Clean up
+        
+        // Create tool completion info
+        const toolCallInfo = ToolExecutionUtils.createToolCallSuccessInfo(
+          toolName, 
+          toolArguments, 
+          result, 
+          duration_ms,
+          isError
+        );
+
+        log.info(`[OnlineGenerator] Tool completed: ${JSON.stringify(toolCallInfo)} in ${duration_ms}ms`);
+
+        // Emit tool complete event
+        yield ToolExecutionUtils.emitExecutionEvent({
+          type: 'tool_complete', 
+          id: displayToolId, 
+          duration_ms: duration_ms,
+          isError: isError
+        });
+        
+        // Show completion
+        yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+        
+      } else if (chunk.type === 'tool-error') {
+        log.error(`[OnlineGenerator] Tool error for: ${chunk.toolName} with id: ${chunk.toolCallId}`);
+        
+        const toolName = chunk.toolName;
+        const toolArguments = JSON.stringify(chunk.input, null, 2);
+        const displayToolId = `tool-${chunk.toolCallId}`;
+        const errorMessage = chunk.error instanceof Error ? chunk.error.message : String(chunk.error);
+        
+        // Calculate duration
+        const startTime = toolExecutionTimes.get(chunk.toolCallId) || Date.now();
+        const duration_ms = Date.now() - startTime;
+        toolExecutionTimes.delete(chunk.toolCallId); // Clean up
+        
+        // Create tool error info
+        const toolCallInfo = ToolExecutionUtils.createToolCallErrorInfo(
+          toolName,
+          toolArguments, 
+          errorMessage,
+          duration_ms
+        );
+        
+        // Emit tool complete event with error
+        yield ToolExecutionUtils.emitExecutionEvent({
+          type: 'tool_complete', 
+          id: displayToolId, 
+          duration_ms: duration_ms,
+          isError: true
+        });
+        
+        // Show completion with error
+        yield `<tool_calls_complete>${JSON.stringify([toolCallInfo])}</tool_calls_complete>`;
+        
+      } else if (chunk.type === 'reasoning-delta') {
+        log.info(`[OnlineGenerator] Reasoning chunk: ${chunk.text}`);
+        // Optionally include reasoning in output
+        yield chunk.text;
+      } else if (chunk.type === 'start-step') {
+        log.info(`[OnlineGenerator] Step started`);
+        // Step start events don't need to be yielded but could be useful for debugging
+      } else if (chunk.type === 'finish-step') {
+        log.info(`[OnlineGenerator] Step finished`);
+        // Step finish events don't need to be yielded
+      } else if (chunk.type === 'start') {
+        log.info(`[OnlineGenerator] Stream started`);
+        // Stream start event
+      } else if (chunk.type === 'finish') {
+        log.info(`[OnlineGenerator] Stream finished`);
+        // Final finish event
+      } else if (chunk.type === 'error') {
+        log.error(`[OnlineGenerator] Error in stream: ${chunk.error}`);
+        yield `\nError ${chunk.error}`;
+        return;
+      }
+    }
+  }
+  
+  /**
    * Create a streaming response using ai-sdk with tool calling
    */
   async *createOnlineResponseGenerator(
@@ -207,6 +345,9 @@ export class OnlineGenerator {
       
       log.info(`[OnlineGenerator] Starting streaming with fullStream`);
 
+      // Track tool execution timing manually since ai-sdk doesn't provide timing in chunks
+      const toolExecutionTimes = new Map<string, number>();
+
       // Use fullStream to handle all chunk types directly  
       const result = await streamText({
         model: openaiProvider('gpt-4.1-mini'),
@@ -214,46 +355,19 @@ export class OnlineGenerator {
         messages,
         tools: aiSdkTools,
         stopWhen: stepCountIs(5), // stop after 5 steps if tools were called
-        onStepFinish: ({ text, toolCalls, toolResults }) => {
+        onStepFinish: ({ toolCalls}) => {
           if (toolCalls && toolCalls.length > 0) {
             log.info(`[OnlineGenerator] Step finished with ${toolCalls.length} tool calls`);
           }
         }
       });
 
-      // Iterate over fullStream to handle all chunk types
-      for await (const chunk of result.fullStream) {
-        if (cancellationToken.isCancelled) {
-          log.info('[OnlineGenerator] Generation cancelled');
-          return;
-        }
+      // Iterate over fullStream using our dedicated chunk handler
+      yield* this.handleStreamChunks(result.fullStream, toolExecutionTimes, cancellationToken);
 
-        // log.info(`[OnlineGenerator] Chunk received: ${JSON.stringify(chunk)}`);
-        if (chunk.type === 'text-delta') {
-          yield chunk.text;
-        } else if (chunk.type === 'tool-call') {
-          log.info(`[OnlineGenerator] Tool call: ${chunk.toolName}`);
-          yield `\n[Using tool: ${chunk.toolName}]\n`;
-        } else if (chunk.type === 'reasoning-delta') {
-          log.info(`[OnlineGenerator] Reasoning chunk: ${chunk.text}`);
-          // Optionally include reasoning in output
-          yield chunk.text;
-        } else if (chunk.type === 'finish-step') {
-          log.info(`[OnlineGenerator] Step finished`);
-          // Step finish events don't need to be yielded
-        } else if (chunk.type === 'finish') {
-          log.info(`[OnlineGenerator] Stream finished`);
-          // Final finish event
-        } else if (chunk.type === 'error') {
-          log.error(`[OnlineGenerator] Error in stream: ${chunk.error}`);
-          yield `\nError ${chunk.error}`;
-          return;
-        }
-      }
-      
     } catch (error) {
-      log.error('[OnlineGenerator] Error in online generator:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error('[OnlineGenerator] Error in online generator:', error, errorMessage);
     }
   }
 }
