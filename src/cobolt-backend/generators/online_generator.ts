@@ -30,6 +30,7 @@ export class OnlineGenerator {
       const zodSchema = this.convertMcpParametersToZod(McptoolDefinition);
 
       // Create a properly typed tool definition
+      // @ts-ignore
       const toolDefinition = tool({
         description: mcpTool.toolDefinition.function.description,
         inputSchema: zodSchema,
