@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - windowsSigning
 
 jobs:
   build-and-publish:
@@ -49,11 +50,20 @@ jobs:
           npm run postinstall
           npm run build
 
-      - name: Publish Windows release
+      - name: Build Windows executable
         if: matrix.platform == 'win'
+        run: npm exec electron-builder -- --win --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm exec electron-builder -- --publish --win
+
+      - name: Windows sign and publish
+        if: matrix.platform == 'win'
+        uses: ./.github/actions/windows-signing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          signpath_api_token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          signpath_sign_token: ${{ secrets.SIGNPATH_SIGN_TOKEN }}
 
       - name: Publish macOS release
         if: matrix.platform == 'mac'

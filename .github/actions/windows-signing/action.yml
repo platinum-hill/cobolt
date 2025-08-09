@@ -1,0 +1,216 @@
+name: Windows Signing and Publish
+description: Sign Windows installer via SignPath and publish release
+inputs:
+  signpath_api_token:
+    description: SignPath API token
+    required: true
+  signpath_sign_token:
+    description: SignPath Sign token
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Get package version
+      id: get-version
+      shell: bash
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "artifact-name=Cobolt-Setup-$VERSION.exe" >> "$GITHUB_OUTPUT"
+
+    - name: Check if release already exists
+      id: check-release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ env.GH_TOKEN }}
+      run: |
+        $TAG      = '${{ steps.get-version.outputs.version }}'
+        $VTAG     = "v$TAG"
+        $ARTIFACT = '${{ steps.get-version.outputs.artifact-name }}'
+
+        try {
+          $json   = gh release view $VTAG --json assets,isDraft 2>$null
+          $ghExit = $LASTEXITCODE
+
+          $releaseExists = 0
+          if (($ghExit -eq 0) -and ($json)) {
+            $info = $json | ConvertFrom-Json
+            $isDraft = $info.isDraft
+            $assets  = @($info.assets)
+            $assetNames = if ($assets) { ($assets | ForEach-Object name) -join ', ' } else { '' }
+
+            Write-Host "Debug: isDraft=$isDraft"
+            Write-Host "Debug: assets.count=$($assets.Count)"
+
+            if ($info -and ($isDraft -eq $false)) {
+              $matches = $assets | Where-Object { $_.name -eq $ARTIFACT }
+              $releaseExists = @($matches).Count
+            }
+          } else {
+            Write-Host "Debug: gh did not return release info; setting releaseExists=0"
+            $releaseExists = 0
+          }
+        } catch {
+          Write-Host "Debug: Exception in check-release: $($_.Exception.Message)"
+          $releaseExists = 0
+        }
+
+        "release-exists=$releaseExists" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+    - name: upload-unsigned-artifact
+      id: upload-unsigned-artifact
+      if: steps.check-release.outputs.release-exists == '0'
+      uses: actions/upload-artifact@v4
+      with:
+        name: cobolt-unsigned-installer
+        retention-days: 1
+        path: |
+          release/build/Cobolt-Setup-${{ steps.get-version.outputs.version }}.exe
+
+    - name: Sign artifact (submit only)
+      if: steps.check-release.outputs.release-exists == '0'
+      id: signpath-submit
+      uses: signpath/github-action-submit-signing-request@v1.1
+      with:
+        api-token: ${{ inputs.signpath_api_token }}
+        organization-id: 3fe5dc9d-e6f6-4c25-83e5-70c5844441b9
+        project-slug: cobolt
+        signing-policy-slug: release-signing
+        github-artifact-id: ${{ steps.upload-unsigned-artifact.outputs.artifact-id }}
+        wait-for-completion: false
+
+    - name: Wait 15 seconds before approval
+      if: steps.check-release.outputs.release-exists == '0'
+      shell: pwsh
+      run: Start-Sleep -Seconds 15
+
+    - name: Approve only this SignPath request
+      if: steps.check-release.outputs.release-exists == '0'
+      shell: pwsh
+      env:
+        SIGNPATH_SIGN_TOKEN: ${{ inputs.signpath_sign_token }}
+      run: |
+        $orgId = '3fe5dc9d-e6f6-4c25-83e5-70c5844441b9'
+        $id = '${{ steps.signpath-submit.outputs.signing-request-id }}'
+
+        if (-not $id) {
+          Write-Error "Could not determine signing request id from action outputs."
+          exit 1
+        }
+
+        $headers = @{
+          Authorization = "Bearer $env:SIGNPATH_SIGN_TOKEN"
+          'Content-Type' = 'application/json'
+        }
+        $bodyJson = @{ action = 'approve'; note = "Auto-approved by GitHub Actions ($env:GITHUB_RUN_ID)" } | ConvertTo-Json
+
+        $uri = "https://app.signpath.io/API/v1/$orgId/SigningRequests/$id/Approve"
+        Write-Host "Approving signing request $id at $uri"
+
+        Invoke-RestMethod -Uri $uri -Headers $headers -Method POST -Body $bodyJson -ErrorAction Stop
+        Write-Host "Approval submitted for $id via Invoke-RestMethod"
+
+    - name: Download signed artifact (poll until available)
+      if: steps.check-release.outputs.release-exists == '0'
+      shell: pwsh
+      env:
+        SIGNPATH_SIGN_TOKEN: ${{ inputs.signpath_sign_token }}
+      run: |
+        $orgId = '3fe5dc9d-e6f6-4c25-83e5-70c5844441b9'
+        $id = '${{ steps.signpath-submit.outputs.signing-request-id }}'
+
+        if (-not $id) {
+          Write-Error "Could not determine signing request id from action outputs."
+          exit 1
+        }
+
+        $downloadUri = "https://app.signpath.io/API/v1/$orgId/SigningRequests/$id/SignedArtifact"
+        $outDir = "signed-artifacts"
+        New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+        $outFile = Join-Path $outDir "${{ steps.get-version.outputs.artifact-name }}"
+
+        $headers = @{
+          Authorization = "Bearer $env:SIGNPATH_SIGN_TOKEN"
+          Accept        = "application/octet-stream"
+        }
+
+        $maxAttempts = 30
+        $delaySec    = 30
+
+        for ($i = 1; $i -le $maxAttempts; $i++) {
+          Write-Host "[$i/$maxAttempts] Attempting download: $downloadUri"
+          try {
+            Invoke-WebRequest -Uri $downloadUri -Headers $headers -OutFile $outFile -ErrorAction Stop
+            if ((Get-Item $outFile).Length -gt 0) {
+              Write-Host "Downloaded signed artifact to $outFile"
+              break
+            }
+          }
+          catch {
+            $status = try { $_.Exception.Response.StatusCode.value__ } catch { $null }
+            Write-Host "Not ready yet (HTTP $status). Waiting $delaySec sec..."
+          }
+
+          if ($i -lt $maxAttempts) {
+            Start-Sleep -Seconds $delaySec
+          }
+        }
+
+        if (-not (Test-Path $outFile) -or (Get-Item $outFile).Length -eq 0) {
+          throw "Failed to download signed artifact after $($maxAttempts * $delaySec) seconds"
+        }
+
+    - name: Update latest.yml with signed artifact details
+      if: steps.check-release.outputs.release-exists == '0'
+      shell: pwsh
+      run: |
+        $signed = "signed-artifacts/${{ steps.get-version.outputs.artifact-name }}"
+        if ((Test-Path "release/build/latest.yml") -and (Test-Path $signed)) {
+          $size = (Get-Item $signed).Length
+          $bytes = [System.IO.File]::ReadAllBytes($signed)
+          $sha = [System.Security.Cryptography.SHA512]::Create()
+          $hashBytes = $sha.ComputeHash($bytes)
+          $sha512b64 = [Convert]::ToBase64String($hashBytes)
+
+          $yml = Get-Content -Raw "release/build/latest.yml"
+          $yml = $yml -replace '(?m)^size:\s*\d+', "size: $size"
+          $yml = $yml -replace '(?m)^sha512:\s*.*', "sha512: $sha512b64"
+          Set-Content -Path "release/build/latest.yml" -Value $yml -Encoding UTF8
+
+          Copy-Item "release/build/latest.yml" "signed-artifacts/latest.yml" -Force
+        }
+
+    - name: Publish Windows release with signed executable
+      if: steps.check-release.outputs.release-exists == '0'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ env.GH_TOKEN }}
+      run: |
+        TAG="${{ steps.get-version.outputs.version }}"
+        VTAG="v$TAG"
+
+        EXISTING_DRAFT_TAG=$(gh release list --limit 100 --json tagName,isDraft,name \
+          --jq "map(select(.isDraft == true and .name == \"$TAG\")) | (.[0].tagName // empty)" || true)
+
+        TARGET_TAG=""
+        if [ -n "$EXISTING_DRAFT_TAG" ]; then
+          TARGET_TAG="$EXISTING_DRAFT_TAG"
+          echo "Using existing draft release tagged $TARGET_TAG (title $TAG)"
+        elif gh release view "$VTAG" --json draft --jq '.draft' 2>/dev/null | grep -q true; then
+          TARGET_TAG="$VTAG"
+          echo "Using existing draft $TARGET_TAG"
+        else
+          echo "No draft release found; creating $VTAG (title $TAG)"
+          ARGS=( "$VTAG" "signed-artifacts/${{ steps.get-version.outputs.artifact-name }}" )
+          if [ -f "signed-artifacts/latest.yml" ]; then
+            ARGS+=( "signed-artifacts/latest.yml" )
+          fi
+          gh release create "${ARGS[@]}" --title "$TAG" --notes "Release $TAG" --draft
+          TARGET_TAG="$VTAG"
+        fi
+
+        echo "Uploading assets to $TARGET_TAG"
+        gh release upload "$TARGET_TAG" "signed-artifacts/${{ steps.get-version.outputs.artifact-name }}" --clobber
+        if [ -f "signed-artifacts/latest.yml" ]; then
+          gh release upload "$TARGET_TAG" "signed-artifacts/latest.yml" --clobber
+        fi
