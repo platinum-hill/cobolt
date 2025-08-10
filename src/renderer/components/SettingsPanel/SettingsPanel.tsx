@@ -4,20 +4,14 @@ import log from 'electron-log/renderer';
 import { ModelResponse } from 'ollama';
 import { Plus, Trash2 } from 'lucide-react';
 import ToolList from '../ToolInfo/ToolList';
+import { ChatMode, Chat } from '../../../types/chat';
 import 'react-toggle/style.css';
 import './SettingsPanel.css';
-
-interface Chat {
-  id: string;
-  title: string;
-  lastMessage?: string;
-  timestamp: Date;
-}
 
 interface SettingsPanelProps {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
-  onNewChat: () => void;
+  onNewChat: (chatMode?: ChatMode) => void;
   onSelectChat: (chatId: string) => void;
   currentChatId: string | null;
 }
@@ -32,6 +26,9 @@ function SettingsPanel({
   const [isOpen, setIsOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [showModeSelection, setShowModeSelection] = useState(false);
+  const [selectedChatMode, setSelectedChatMode] =
+    useState<ChatMode>('CONTEXT_AWARE');
 
   const [availableModels, setAvailableModels] = useState<ModelResponse[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -156,15 +153,28 @@ function SettingsPanel({
           !button.contains(e.target as Node)
         ) {
           setIsOpen(false);
+          setShowModeSelection(false); // Also close mode selection
+        }
+      }
+    };
+
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showModeSelection) {
+          setShowModeSelection(false);
+        } else if (isOpen) {
+          setIsOpen(false);
         }
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
     };
-  }, [isOpen]);
+  }, [isOpen, showModeSelection]);
 
   // Update app container class when panel opens/closes
   useEffect(() => {
@@ -209,31 +219,45 @@ function SettingsPanel({
   }, [setIsLoading]);
 
   const handleNewChat = async () => {
-    try {
-      // Check if current chat has messages
-      if (currentChatId) {
-        const messages = await window.api.getMessagesForChat(currentChatId);
-        if (messages.length === 0) {
-          // If current chat has no messages, just select it instead of creating a new one
-          onSelectChat(currentChatId);
-          return;
+    // If we're already showing mode selection, proceed with creating the chat
+    if (showModeSelection) {
+      try {
+        // Check if current chat has messages
+        if (currentChatId) {
+          const messages = await window.api.getMessagesForChat(currentChatId);
+          if (messages.length === 0) {
+            // If current chat has no messages, just select it instead of creating a new one
+            onSelectChat(currentChatId);
+            setShowModeSelection(false);
+            return;
+          }
         }
-      }
 
-      setIsLoading(true);
-      await onNewChat();
-      // Reload chats after creating a new one
-      const chatsData = await window.api.getRecentChats();
-      setChats(chatsData);
+        setIsLoading(true);
+        await onNewChat(selectedChatMode);
 
-      // On mobile, close the panel after selecting a new chat
-      if (window.innerWidth < 768) {
-        setIsOpen(false);
+        // Reload chats after creating a new one
+        const chatsData = await window.api.getRecentChats();
+        setChats(chatsData);
+
+        // On mobile, close the panel after selecting a new chat
+        if (window.innerWidth < 768) {
+          setIsOpen(false);
+        }
+
+        setShowModeSelection(false);
+      } catch (error) {
+        log.error('Failed to create new chat:', error);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      log.error('Failed to create new chat:', error);
-    } finally {
-      setIsLoading(false);
+    } else {
+      // Show mode selection UI
+      console.log(
+        'Showing mode selection, current selected mode:',
+        selectedChatMode,
+      );
+      setShowModeSelection(true);
     }
   };
 
@@ -253,9 +277,9 @@ function SettingsPanel({
       setIsLoading(true);
       await window.api.deleteChat(chatId);
 
-      // If we're deleting the current chat, create a new one
+      // If we're deleting the current chat, create a new one with default mode
       if (chatId === currentChatId) {
-        await onNewChat();
+        await onNewChat('CONTEXT_AWARE');
       }
 
       // Refresh the chat list
@@ -321,6 +345,66 @@ function SettingsPanel({
           <span className="button-text">New Chat</span>
         </button>
 
+        {showModeSelection && (
+          <div className="chat-mode-selection">
+            <h4>Select Chat Mode</h4>
+            <div className="mode-options">
+              <label className="mode-option">
+                <input
+                  type="radio"
+                  name="chatMode"
+                  value="CONTEXT_AWARE"
+                  checked={selectedChatMode === 'CONTEXT_AWARE'}
+                  onChange={(e) =>
+                    setSelectedChatMode(e.target.value as ChatMode)
+                  }
+                />
+                <div className="mode-details">
+                  <div className="mode-title">Context Aware</div>
+                  <div className="mode-description">
+                    Uses local models with your tools and documents
+                  </div>
+                </div>
+              </label>
+              <label className="mode-option">
+                <input
+                  type="radio"
+                  name="chatMode"
+                  value="ONLINE"
+                  checked={selectedChatMode === 'ONLINE'}
+                  onChange={(e) =>
+                    setSelectedChatMode(e.target.value as ChatMode)
+                  }
+                />
+                <div className="mode-details">
+                  <div className="mode-title">Online</div>
+                  <div className="mode-description">
+                    Uses cloud AI models with internet access
+                  </div>
+                </div>
+              </label>
+            </div>
+            <div className="mode-actions">
+              <button
+                type="button"
+                onClick={() => setShowModeSelection(false)}
+                className="cancel-button"
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="create-button"
+                disabled={isLoading}
+              >
+                Create Chat
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="conversations-section">
           <h3>Conversations</h3>
           {isLoading && <div className="loading-indicator">Loading...</div>}
@@ -342,7 +426,14 @@ function SettingsPanel({
                       onClick={() => handleSelectChat(chat.id)}
                     >
                       <div className="conversation-content">
-                        <div className="conversation-title">{chat.title}</div>
+                        <div className="conversation-header">
+                          <div className="conversation-title">{chat.title}</div>
+                          <div
+                            className={`chat-mode-badge ${chat.chat_mode.toLowerCase().replace('_', '-')}`}
+                          >
+                            {chat.chat_mode === 'CONTEXT_AWARE' ? 'LOC' : 'ON'}
+                          </div>
+                        </div>
                         {chat.lastMessage && (
                           <div className="conversation-preview">
                             {truncateMessage(chat.lastMessage)}

@@ -9,17 +9,7 @@ import {app} from 'electron';
 import log from 'electron-log';
 import { Message } from 'ollama';
 import { Database } from 'sqlite3';
-
-interface ChatHistoryMessage {
-  role: string; // 'user', 'assistant', or 'tool'
-  content: string;
-}
-
-type Chat = {
-  id: string;
-  title: string;
-  created_at: Date;
-};
+import { ChatMode, Chat, ChatHistoryMessage } from '../types/chat';
 
 class ChatHistory {
   private messages: ChatHistoryMessage[] = [];
@@ -152,6 +142,7 @@ class PersistentChatHistory {
       CREATE TABLE IF NOT EXISTS chats (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        chat_mode TEXT DEFAULT 'CONTEXT_AWARE' CHECK(chat_mode IN ('CONTEXT_AWARE', 'ONLINE')) NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -178,6 +169,13 @@ class PersistentChatHistory {
     this.db.run(createMessagesTableQuery, (err) => {
       if (err) {
         console.error('Error creating chat_messages table:', err.message);
+      }
+    });
+
+    // Migration: Add chat_mode column to existing chats table if it doesn't exist
+    this.db.run(`ALTER TABLE chats ADD COLUMN chat_mode TEXT DEFAULT 'CONTEXT_AWARE' CHECK(chat_mode IN ('CONTEXT_AWARE', 'ONLINE'))`, (err) => {
+      if (err && !err.message.includes('duplicate column name')) {
+        console.error('Error adding chat_mode column:', err.message);
       }
     });
   }
@@ -231,10 +229,10 @@ class PersistentChatHistory {
   addChat(chat: Chat): Promise<Chat> {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
-        INSERT INTO chats (id, title, created_at) VALUES (?, ?, ?)
+        INSERT INTO chats (id, title, chat_mode, created_at) VALUES (?, ?, ?, ?)
       `);
 
-      stmt.run([chat.id, chat.title, chat.created_at], (err) => {
+      stmt.run([chat.id, chat.title, chat.chat_mode, chat.created_at], (err) => {
         if (err) {
           stmt.finalize();
           reject(err);
@@ -254,7 +252,7 @@ class PersistentChatHistory {
   getRecentChats(limit = 10): Promise<Chat[]> {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
-        SELECT id, title FROM chats ORDER BY created_at DESC LIMIT ?
+        SELECT id, title, chat_mode, created_at FROM chats ORDER BY created_at DESC LIMIT ?
       `);
 
       stmt.all([limit], (err, rows) => {
@@ -369,7 +367,7 @@ class PersistentChatHistory {
   getChat(chatId: string): Promise<Chat | null> {
     return new Promise((resolve, reject) => {
       const stmt = this.db.prepare(`
-        SELECT id, title, created_at FROM chats WHERE id = ?
+        SELECT id, title, chat_mode, created_at FROM chats WHERE id = ?
       `);
 
       stmt.get([chatId], (err, row: any) => {
@@ -382,6 +380,7 @@ class PersistentChatHistory {
             const chat: Chat = {
               id: row.id,
               title: row.title,
+              chat_mode: row.chat_mode || 'CONTEXT_AWARE' as ChatMode,
               created_at: row.created_at
             };
             resolve(chat);

@@ -22,6 +22,7 @@ import {
   ChatHistory,
   PersistentChatHistory,
 } from '../cobolt-backend/chat_history';
+import { ChatMode } from '../types/chat';
 import { globalCancellationToken } from '../cobolt-backend/utils/cancellation';
 import appMetadata from '../cobolt-backend/data_models/app_metadata';
 import {
@@ -306,12 +307,15 @@ async function processChunk(
     }
 
     // Save the complete response to the database
-    if (chatId) {
+    if (chatId && fullResponse) {
       await persistentChatHistory.addMessageToChat(
         chatId,
         'assistant',
         fullResponse,
       );
+
+      // Also add to in-memory history to maintain context and prevent reloading from db
+      chatHistory.addAssistantMessage(fullResponse);
     }
 
     return fullResponse;
@@ -322,18 +326,26 @@ async function processChunk(
 }
 
 // Add new chat handler
-ipcMain.handle('create-new-chat', async () => {
-  // Clear the in-memory chat history to ensure no messages from previous chats are carried over
-  chatHistory.clear();
+ipcMain.handle(
+  'create-new-chat',
+  async (_, chatMode: ChatMode = 'CONTEXT_AWARE') => {
+    // Clear the in-memory chat history to ensure no messages from previous chats are carried over
+    chatHistory.clear();
 
-  const newChat = {
-    id: uuidv4(),
-    title: 'New Chat',
-    created_at: new Date(),
-  };
-  await persistentChatHistory.addChat(newChat);
-  return newChat;
-});
+    console.log('Backend: Creating new chat with mode:', chatMode);
+
+    const newChat = {
+      id: uuidv4(),
+      title: 'New Chat',
+      chat_mode: chatMode,
+      created_at: new Date(),
+    };
+
+    console.log('Backend: New chat object:', newChat);
+    await persistentChatHistory.addChat(newChat);
+    return newChat;
+  },
+);
 
 // Get recent chats handler
 ipcMain.handle('get-recent-chats', async () => {
@@ -355,6 +367,7 @@ ipcMain.handle('get-recent-chats', async () => {
 
           return {
             ...chat,
+            chat_mode: chat.chat_mode || 'CONTEXT_AWARE', // Default for existing chats
             lastMessage,
             timestamp,
           };
@@ -362,6 +375,7 @@ ipcMain.handle('get-recent-chats', async () => {
           log.error(`Error getting messages for chat ${chat.id}:`, error);
           return {
             ...chat,
+            chat_mode: chat.chat_mode || 'CONTEXT_AWARE', // Default for existing chats
             lastMessage: '',
             timestamp: new Date(),
           };
@@ -412,20 +426,8 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
       await persistentChatHistory.updateChatTitle(chatId, newTitle);
     }
 
-    // Load the chat history for this specific chat (excluding the current message to avoid duplication)
-    chatHistory.clear();
-    const messages = await persistentChatHistory.getMessagesForChat(chatId);
-    messages.forEach((msg: any) => {
-      // Skip the current user message since it will be added by the query engine
-      if (msg.role === 'user' && msg.content === message) {
-        return; // Skip this message to avoid duplication
-      }
-      if (msg.role === 'user') {
-        chatHistory.addUserMessage(msg.content);
-      } else if (msg.role === 'assistant') {
-        chatHistory.addAssistantMessage(msg.content);
-      }
-    });
+    // Add user message directly to in-memory history (more efficient than reloading from DB)
+    chatHistory.addUserMessage(message);
 
     const requestContext: RequestContext = {
       currentDatetime: new Date(),
@@ -434,9 +436,12 @@ ipcMain.handle('send-message', async (_, chatId: string, message: string) => {
       requestId: uuidv4(),
     };
 
+    // Use the chat's mode, default to CONTEXT_AWARE if not found
+    const chatMode: ChatMode = chat?.chat_mode || 'CONTEXT_AWARE';
+
     const stream = await queryEngineInstance.query(
       requestContext,
-      'ONLINE',
+      chatMode,
       globalCancellationToken,
     );
 

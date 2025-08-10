@@ -8,6 +8,7 @@ import { McpClient } from './connectors/mcp_client';
 import { CancellationToken, globalCancellationToken } from './utils/cancellation';
 import { ConductorGenerator } from './generators/conductor_generator';
 import { OnlineGenerator } from './generators/online_generator';
+import { ChatMode } from '../types/chat';
 
 /**
  * Main query engine that handles AI chat requests and tool usage
@@ -111,7 +112,7 @@ class QueryEngine {
    */
   async query(
     requestContext: RequestContext,
-    chatMode: 'CHAT' | 'CONTEXT_AWARE' | 'ONLINE' = 'CHAT',
+    chatMode: ChatMode = 'CONTEXT_AWARE',
     cancellationToken: CancellationToken = globalCancellationToken
   ): Promise<AsyncGenerator<string>> {
     TraceLogger.trace(requestContext, 'user_chat_history', requestContext.chatHistory.toString());

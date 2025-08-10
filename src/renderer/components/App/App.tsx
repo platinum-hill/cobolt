@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import log from 'electron-log/renderer';
 import ChatInterface from '../ChatInterface/ChatInterface';
 import SettingsPanel from '../SettingsPanel/SettingsPanel';
-import ErrorDialog from '../ErrorDialog/ErrorDialog';
 import UpdateNotification from '../UpdateNotification/UpdateNotification';
+import ErrorDialog from '../ErrorDialog/ErrorDialog';
+import { ChatMode } from '../../../types/chat';
 import './App.css';
 
 export default function App() {
@@ -27,10 +28,10 @@ export default function App() {
     loadLastChat();
   }, []);
 
-  const handleNewChat = async () => {
+  const handleNewChat = async (chatMode?: ChatMode) => {
     try {
       // The backend will automatically clear the chat history
-      const newChat = await window.api.createNewChat();
+      const newChat = await window.api.createNewChat(chatMode);
       setCurrentChatId(newChat.id);
       return newChat;
     } catch (error) {

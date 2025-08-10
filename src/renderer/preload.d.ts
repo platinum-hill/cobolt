@@ -1,4 +1,5 @@
 import { ToolInfo } from './types/index';
+import { ChatMode } from '../types/chat';
 
 declare global {
   // eslint-disable-next-line no-unused-vars
@@ -12,11 +13,18 @@ declare global {
 
       // Chat-related API methods
       getRecentChats: () => Promise<
-        { id: string; title: string; timestamp: Date; lastMessage?: string }[]
+        {
+          id: string;
+          title: string;
+          chat_mode: ChatMode;
+          timestamp: Date;
+          lastMessage?: string;
+        }[]
       >;
-      createNewChat: () => Promise<{
+      createNewChat: (chatMode?: ChatMode) => Promise<{
         id: string;
         title: string;
+        chat_mode: ChatMode;
         timestamp: Date;
       }>;
       getMessagesForChat: (

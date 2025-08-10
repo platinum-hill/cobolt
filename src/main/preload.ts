@@ -1,8 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { ChatMode } from '../types/chat';
 
 type Chat = {
   id: string;
   title: string;
+  chat_mode: ChatMode;
   created_at: Date;
 };
 
@@ -79,7 +81,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // Chat history methods
   getRecentChats: (): Promise<Chat[]> => ipcRenderer.invoke('get-recent-chats'),
-  createNewChat: (): Promise<Chat> => ipcRenderer.invoke('create-new-chat'),
+  createNewChat: (chatMode?: ChatMode): Promise<Chat> =>
+    ipcRenderer.invoke('create-new-chat', chatMode),
   updateChatTitle: (chatId: string, title: string): Promise<void> =>
     ipcRenderer.invoke('update-chat-title', chatId, title),
   deleteChat: (chatId: string): Promise<void> =>
