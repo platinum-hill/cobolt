@@ -12,20 +12,20 @@ jobs:
 
     strategy:
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [macos-latest, windows-2022]
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install Node.js and NPM
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
           cache: npm
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -38,11 +38,18 @@ jobs:
         run: |
           npm install
 
-      - name: Run tests
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
         run: |
-          npm run package
+          npm run build
+
+      - name: Lint
+        run: |
           npm run lint
+
+      - name: Type check
+        run: |
           npm exec tsc
+
+      - name: Run tests
+        run: |
           npm test
