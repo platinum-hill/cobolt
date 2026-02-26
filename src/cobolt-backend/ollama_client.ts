@@ -5,6 +5,38 @@ import * as os from 'os';
 import configStore from './data_models/config_store';
 import { BrowserWindow } from 'electron';
 
+/**
+ * Determine the Ollama host URL to use.
+ * Prioritizes the OLLAMA_HOST environment variable over the stored config.
+ */
+function resolveOllamaHost(): string {
+  const envHost = process.env.OLLAMA_HOST;
+  if (envHost) {
+    log.info(`OLLAMA_HOST environment variable detected: ${envHost}`);
+    // OLLAMA_HOST may be just a host:port or a full URL
+    if (envHost.startsWith('http://') || envHost.startsWith('https://')) {
+      return envHost;
+    }
+    return `http://${envHost}`;
+  }
+  return configStore.getOllamaUrl();
+}
+
+/**
+ * Check if the resolved Ollama host points to a remote (non-local) server.
+ * If remote, we should not attempt to start a local ollama server.
+ */
+function isRemoteOllamaHost(hostUrl: string): boolean {
+  try {
+    const url = new URL(hostUrl);
+    const hostname = url.hostname;
+    const localHosts = ['localhost', '127.0.0.1', '::1', '0.0.0.0'];
+    return !localHosts.includes(hostname);
+  } catch {
+    return false;
+  }
+}
+
 let progressWindow: BrowserWindow | null = null;
 let updateTimer: NodeJS.Timeout | null = null;
 let pendingUpdate: { title: string; message: string; detail: string } | null = null;
@@ -62,8 +94,11 @@ function sendModelDownloadStatus(title: string, message: string, detail: string,
   }, 1000);
 }
 
+const ollamaHost = resolveOllamaHost();
+log.info(`Ollama client connecting to: ${ollamaHost}`);
+
 const ollama = new Ollama({
-  host: configStore.getOllamaUrl(),
+  host: ollamaHost,
 });
 
 const OLLAMA_START_TIMEOUT = configStore.getOllamaStartTimeout();
@@ -283,15 +318,33 @@ async function updateModels() {
 async function initOllama(): Promise<boolean> {
   log.info("Initializing Ollama");
   const platform = os.platform();
-  
+  const isRemote = isRemoteOllamaHost(ollamaHost);
+
+  if (isRemote) {
+    log.info(`Remote Ollama host detected (${ollamaHost}), skipping local server startup`);
+  }
+
   try {
     await ollama.ps();
     log.log('Ollama server is already running');
   } catch {
+    if (isRemote) {
+      // Remote host is not reachable — don't try to start a local server
+      log.error(`Cannot reach remote Ollama server at ${ollamaHost}`);
+      throw new Error(
+        `Cannot connect to remote Ollama server at ${ollamaHost}.
+
+        The OLLAMA_HOST environment variable is set to a remote address.
+        Please ensure the remote Ollama server is running and accessible, then restart the application.
+
+        To use a local Ollama server instead, unset the OLLAMA_HOST environment variable.`
+      );
+    }
+
     log.log('Server not running: Starting the ollama server on platform:', platform);
     ollamaServerStartedByApp = true;
     const system: string = platform.toLowerCase();
-    
+
     if (system === 'win32' || system === 'linux') {
       // run in the background but capture a few initial log lines
       const env = {
@@ -335,30 +388,30 @@ async function initOllama(): Promise<boolean> {
       );
     } else {
       log.log(`Unsupported operating system: ${system}`);
-      
+
       return false;
     }
-    
+
     await new Promise(function sleep(resolve) {
       setTimeout(resolve, OLLAMA_START_TIMEOUT);
     });
-    
+
     try {
       await ollama.ps();
       log.log('Ollama server started successfully');
     } catch (startupError) {
       log.error('Failed to start Ollama server. Please start Ollama manually and restart the application. Error:', startupError);
-      
+
       // Throw the error to be handled by the calling code
       throw new Error(
         `Ollama startup failed. Failed to start Ollama server automatically.
-        
+
         Please start Ollama manually and restart the application.
         The application attempted to start Ollama but it is not responding. Please:
         1. Check if Ollama is installed correctly
         2. Start Ollama manually (run "ollama serve" in terminal)
         3. Restart this application
-        
+
         If the problem persists, check the Ollama installation and try running "ollama --version" in your terminal.
         Error: ${startupError instanceof Error ? startupError.message : String(startupError)}`
       );
