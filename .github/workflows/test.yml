@@ -38,20 +38,11 @@ jobs:
         run: |
           npm install
 
-      - name: Package
+      - name: Run tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run package
-
-      - name: Lint
-        run: |
           npm run lint
-
-      - name: Type check
-        run: |
           npm exec tsc
-
-      - name: Run tests
-        run: |
           npm test
